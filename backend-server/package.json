@@ -1,0 +1,28 @@
+{
+  "name": "kalamandir-api",
+  "version": "1.0.0",
+  "description": "Kalamandir Dance Institute — Express + MongoDB backend",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "seed": "node scripts/seed.js",
+    "seed:keep": "node scripts/seed.js --keep",
+    "db:check": "node scripts/check-db.js",
+    "db:verify-logins": "node scripts/verify-logins.js",
+    "db:verify-live": "node scripts/verify-live.js",
+    "db:check-classes": "node scripts/check-classes.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.0",
+    "zod": "^3.24.1"
+  }
+}

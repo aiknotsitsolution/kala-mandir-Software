@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#310d20" />
+  <!-- Palace arch -->
+  <path d="M32 10C20 10 13 19 13 31v23h38V31c0-12-7-21-19-21z"
+        fill="none" stroke="#c6a45b" stroke-width="2.4" />
+  <!-- Inner flame / dancer silhouette -->
+  <path d="M32 22c-4.6 3.4-7 7.6-7 12.4 0 4.2 2.4 7.2 5.4 8.4-1.6 1.6-2.6 3.4-2.6 5.6h7c0-2.2-1-4-2.6-5.6 3-1.2 5.4-4.2 5.4-8.4 0-4.8-2.4-9-7-12.4z"
+        fill="#c6a45b" />
+  <circle cx="32" cy="33" r="2.4" fill="#310d20" />
+</svg>

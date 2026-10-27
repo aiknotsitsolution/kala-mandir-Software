@@ -1,0 +1,237 @@
+/* ==========================================================================
+   Member portal — "3D paper artwork" layer.
+   Every class here is prefixed `pp-` so nothing collides with index.css.
+   Pair with the global `.paper-surface` / `.paper-lift` / `.editorial-rule`
+   helpers already defined in index.css.
+
+   Kept in @layer components (same as index.css): unlayered custom CSS beats
+   Tailwind v4's layered utilities, which is what let `.paper-surface`'s
+   `position: relative` override `absolute` on the pass faces/sticker.
+   ========================================================================== */
+
+@layer components {
+
+/* --- Stacked paper: solid offset "sheets" behind a real paper surface ---- */
+.pp-stack {
+  box-shadow:
+    3px 3px 0 -1px var(--paper-edge),
+    6px 6px 0 -2px var(--paper-2),
+    9px 9px 0 -3px var(--paper-edge),
+    0 24px 34px -20px rgba(0, 0, 0, 0.85);
+}
+
+.pp-stack-sm {
+  box-shadow:
+    2px 2px 0 -1px var(--paper-edge),
+    4px 4px 0 -2px var(--paper-2),
+    0 16px 22px -16px rgba(0, 0, 0, 0.8);
+}
+
+/* --- Volt highlighter marker swipe --------------------------------------- */
+.pp-mark {
+  background-image: linear-gradient(
+    100deg,
+    rgba(212, 242, 60, 0) 0%,
+    rgba(212, 242, 60, 0.85) 9%,
+    rgba(212, 242, 60, 0.55) 92%,
+    rgba(212, 242, 60, 0) 100%
+  );
+  padding-inline: 0.32em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* --- Rubber stamps -------------------------------------------------------- */
+.pp-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  border: 2px solid currentColor;
+  outline: 1.5px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 4px;
+  padding: 0.18em 0.7em;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.88;
+  rotate: -7deg;
+}
+
+.pp-stamp-ok {
+  color: #3f7d51;
+}
+
+.pp-stamp-warn {
+  color: #a3601f;
+}
+
+.pp-stamp-bad {
+  color: #a33d2a;
+}
+
+.pp-stamp-muted {
+  color: #6b6f63;
+}
+
+/* --- Perforated ticket separators ---------------------------------------- */
+.pp-perf-v {
+  position: relative;
+}
+
+.pp-perf-v::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 2px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--paper-edge) 0 7px,
+    transparent 7px 13px
+  );
+}
+
+.pp-perf-h {
+  position: relative;
+}
+
+.pp-perf-h::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 0;
+  height: 2px;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--paper-edge) 0 7px,
+    transparent 7px 13px
+  );
+}
+
+/* Punched half-circle notches at the ends of a perforation line. */
+.pp-notch {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--background);
+  pointer-events: none;
+}
+
+.pp-notch-top {
+  top: -8px;
+  left: -7px;
+}
+
+.pp-notch-bottom {
+  bottom: -8px;
+  left: -7px;
+}
+
+/* Punch holes on the left/right edges of a small ticket. */
+.pp-punch {
+  position: relative;
+}
+
+.pp-punch::before,
+.pp-punch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--background);
+  translate: 0 -50%;
+}
+
+.pp-punch::before {
+  left: -6px;
+}
+
+.pp-punch::after {
+  right: -6px;
+}
+
+/* --- Receipt with torn top + bottom edges --------------------------------- */
+/* Three mask layers: a 12px jag strip on the top edge, an opaque middle band,
+   and a 12px jag strip on the bottom edge. The tears scale in PIXELS so they
+   hug the edges — the old single `100% 100%` mask stretched its 24-unit viewBox
+   across the whole receipt, cutting dark bands through the middle. The middle
+   band is 20px short of full height so it never overlaps the tear zones. */
+.pp-receipt {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 12' preserveAspectRatio='none'%3E%3Cpath d='M0 12V6l40-3 40 4 40-2 40 5 40-4 40 2 40-5 40 4 40-2 40 3 40-4 40 5 40-3 40 2 40-4 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4V12z' fill='%23000'/%3E%3C/svg%3E"), linear-gradient(#000, #000), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 12' preserveAspectRatio='none'%3E%3Cpath d='M0 0V6l40 3 40-4 40 2 40-5 40 4 40-2 40 5 40-4 40 2 40-3 40 4 40-5 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4V0z' fill='%23000'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 12' preserveAspectRatio='none'%3E%3Cpath d='M0 12V6l40-3 40 4 40-2 40 5 40-4 40 2 40-5 40 4 40-2 40 3 40-4 40 5 40-3 40 2 40-4 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4V12z' fill='%23000'/%3E%3C/svg%3E"), linear-gradient(#000, #000), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 12' preserveAspectRatio='none'%3E%3Cpath d='M0 0V6l40 3 40-4 40 2 40-5 40 4 40-2 40 5 40-4 40 2 40-3 40 4 40-5 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4 40-3 40 2 40-4 40 3 40-2 40 4V0z' fill='%23000'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 12px, 100% calc(100% - 20px), 100% 12px;
+  mask-size: 100% 12px, 100% calc(100% - 20px), 100% 12px;
+  -webkit-mask-position: top, center, bottom;
+  mask-position: top, center, bottom;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* --- Dotted stub texture -------------------------------------------------- */
+.pp-dotted {
+  background-image: radial-gradient(var(--paper-edge) 1px, transparent 1.2px);
+  background-size: 9px 9px;
+}
+
+/* --- Vertical stub lettering --------------------------------------------- */
+.pp-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.35em;
+}
+
+/* --- 3D flip scene --------------------------------------------------------- */
+.pp-scene {
+  perspective: 1400px;
+}
+
+.pp-flip {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.pp-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.pp-face-back {
+  transform: rotateY(180deg);
+}
+
+/* --- Faux barcode strip (receipts) ---------------------------------------- */
+.pp-barcode {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--paper-foreground) 0 2px,
+    transparent 2px 5px,
+    var(--paper-foreground) 5px 6px,
+    transparent 6px 10px,
+    var(--paper-foreground) 10px 13px,
+    transparent 13px 15px
+  );
+  opacity: 0.35;
+}
+
+/* --- Paper note with hand-cut dashed border -------------------------------- */
+.pp-note {
+  border: 1.5px dashed var(--paper-edge);
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-stamp {
+    rotate: 0deg;
+  }
+}
+
+} /* @layer components */

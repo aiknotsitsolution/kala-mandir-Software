@@ -1,0 +1,963 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Only treat a `.dark` ancestor as dark — the app ships a light, warm
+   "Royal Kala Mandir" theme, so `dark:` utilities stay inert everywhere. */
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   ROYAL KALA MANDIR — design tokens
+   A premium Indian classical dance identity: royal burgundy + antique gold on
+   warm ivory, with charcoal text. The sidebar carries the deep brand colours;
+   the workspace stays a warm neutral so dense tables remain highly readable.
+   ========================================================================== */
+
+/* The base block is BOTH the document default (light + Royal Burgundy) and the
+   "light" palette a `.theme-preview` box can opt into via data-mode="light". */
+:root,
+[data-mode="light"] {
+  color-scheme: light;
+
+  /* Corner radius — 8–12px reads premium without going soft. */
+  --radius: 0.625rem;
+
+  /* Brand palette */
+  --km-burgundy: #310d20;   /* Royal Burgundy — sidebar, primary */
+  --km-wine: #48172c;       /* Deep Wine — hover, layered brand surfaces */
+  --km-plum: #6b2644;       /* Lifted wine for gradients/hover states */
+  --km-gold: #c6a45b;       /* Antique Gold — accent, active states */
+  --km-gold-muted: #9b8148; /* Muted Gold — fine borders, quiet accents */
+  --km-ivory: #f5e8c8;      /* Warm Ivory — text on burgundy */
+  --km-charcoal: #171316;   /* Charcoal — body text on light */
+
+  /* Warm neutral workspace surfaces */
+  --background: #faf6ee;            /* page canvas */
+  --foreground: #171316;            /* charcoal text */
+
+  --card: #fffdf7;                  /* warm white card */
+  --card-foreground: #241a1e;
+
+  --popover: #fffdf7;
+  --popover-foreground: #241a1e;
+
+  --primary: #310d20;               /* royal burgundy */
+  --primary-foreground: #f7f0e2;    /* ivory */
+
+  --secondary: #f0e7d5;             /* warm sand */
+  --secondary-foreground: #310d20;
+
+  --muted: #f2ebdb;                 /* muted warm neutral */
+  --muted-foreground: #6c5f57;      /* readable muted brown-grey */
+
+  --accent: #f3e6c8;                /* gold-tinted wash */
+  --accent-foreground: #310d20;
+
+  --destructive: #9b2c2c;           /* refined red — never neon */
+  --destructive-foreground: #fff8f2;
+
+  --success: #2f6b4f;               /* deep, calm green */
+  --warning: #a66a12;               /* amber */
+  --info: #2c5e7a;                  /* slate blue */
+
+  --border: #e6dac2;                /* gold-tinted hairline */
+  --input: #ddd0b6;
+  --ring: rgba(198, 164, 91, 0.75); /* gold focus ring */
+
+  /* Charts — burgundy / gold / wine family */
+  --chart-1: #310d20;
+  --chart-2: #c6a45b;
+  --chart-3: #7a3350;
+  --chart-4: #9b8148;
+  --chart-5: #48172c;
+
+  /* Sidebar — deep wine, matched to `public/images/sidebar bottom background.png` */
+  --sidebar: #2c0411;
+  --sidebar-foreground: #f0e2c4;
+  --sidebar-primary: #c6a45b;
+  --sidebar-primary-foreground: #2a0b1c;
+  --sidebar-accent: #48172c;
+  --sidebar-accent-foreground: #f5e8c8;
+  --sidebar-border: rgba(198, 164, 91, 0.18);
+  --sidebar-ring: rgba(198, 164, 91, 0.6);
+
+  /* Editorial / tactile surfaces */
+  --paper: #f7efdc;
+  --paper-2: #efe3c9;
+  --paper-foreground: #2a1a20;
+  --paper-edge: #e0d0ae;
+  --km-scroll: #d8c9a8;
+}
+
+/* ==========================================================================
+   THEME RUNTIME — institute-wide theming
+   `<html>` (and any `.theme-preview` box) carries two attributes written by
+   `src/lib/theme.js`:
+     data-mode="light|dark"    — resolved mode ("system" resolves to one)
+     data-accent="<palette>"   — brand palette chosen in Manage Institute
+   Order matters at equal specificity, so these blocks run:
+     light neutrals → dark neutrals → light palettes → dark palettes.
+   ========================================================================== */
+
+/* ---- Dark mode: shared neutrals (tinted with the active palette) ------ */
+[data-mode="dark"] {
+  color-scheme: dark;
+
+  --background: color-mix(in srgb, #100d0f 90%, var(--primary));
+  --foreground: #f2ece7;
+
+  --card: color-mix(in srgb, #191417 90%, var(--primary));
+  --card-foreground: #efe8e3;
+
+  --popover: color-mix(in srgb, #1c171a 90%, var(--primary));
+  --popover-foreground: #efe8e3;
+
+  --muted: color-mix(in srgb, #241f22 88%, var(--primary));
+  --muted-foreground: #a4968f;
+
+  --destructive: #dd6a6a;
+  --destructive-foreground: #2a0e0e;
+  --success: #6fce9f;
+  --warning: #e0a44a;
+  --info: #6fb4d6;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.14);
+
+  /* Scrollbars / skeleton shimmer follow the dark canvas too. */
+  --km-scroll: rgba(255, 255, 255, 0.22);
+}
+
+/* ---- Palettes — light ------------------------------------------------- */
+/* Royal Burgundy (default) — same values as the base block above, repeated so
+   a preview box can preview burgundy while another palette is live. */
+[data-accent="burgundy"] {
+  --km-burgundy: #310d20;
+  --km-wine: #48172c;
+  --km-plum: #6b2644;
+  --km-gold: #c6a45b;
+  --km-gold-muted: #9b8148;
+  --km-ivory: #f5e8c8;
+
+  --primary: #310d20;
+  --primary-foreground: #f7f0e2;
+  --secondary: #f0e7d5;
+  --secondary-foreground: #310d20;
+  --accent: #f3e6c8;
+  --accent-foreground: #310d20;
+  --ring: rgba(198, 164, 91, 0.75);
+
+  --sidebar: #2c0411;
+  --sidebar-foreground: #f0e2c4;
+  --sidebar-primary: #c6a45b;
+  --sidebar-primary-foreground: #2a0b1c;
+  --sidebar-accent: #48172c;
+  --sidebar-accent-foreground: #f5e8c8;
+  --sidebar-border: rgba(198, 164, 91, 0.18);
+  --sidebar-ring: rgba(198, 164, 91, 0.6);
+
+  --chart-1: #310d20;
+  --chart-2: #c6a45b;
+  --chart-3: #7a3350;
+  --chart-4: #9b8148;
+  --chart-5: #48172c;
+
+  --paper: #f7efdc;
+  --paper-2: #efe3c9;
+  --paper-foreground: #2a1a20;
+  --paper-edge: #e0d0ae;
+  --km-scroll: #d8c9a8;
+}
+
+/* Jade Emerald — deep green with a mint-gold highlight. */
+[data-accent="emerald"] {
+  --km-burgundy: #0e3b2f;
+  --km-wine: #14513f;
+  --km-plum: #1e6d55;
+  --km-gold: #5cc3a0;
+  --km-gold-muted: #3f9a7c;
+  --km-ivory: #e6f4ec;
+
+  --primary: #0e3b2f;
+  --primary-foreground: #f2fbf6;
+  --secondary: #e2efe8;
+  --secondary-foreground: #0e3b2f;
+  --accent: #d8efe4;
+  --accent-foreground: #0e3b2f;
+  --ring: rgba(92, 195, 160, 0.75);
+
+  --sidebar: #07281f;
+  --sidebar-foreground: #dcefe6;
+  --sidebar-primary: #5cc3a0;
+  --sidebar-primary-foreground: #06241c;
+  --sidebar-accent: #14513f;
+  --sidebar-accent-foreground: #e6f4ec;
+  --sidebar-border: rgba(92, 195, 160, 0.2);
+  --sidebar-ring: rgba(92, 195, 160, 0.6);
+
+  --chart-1: #0e3b2f;
+  --chart-2: #5cc3a0;
+  --chart-3: #1e6d55;
+  --chart-4: #3f9a7c;
+  --chart-5: #14513f;
+
+  --paper: #f0f6f1;
+  --paper-2: #e1eee6;
+  --paper-foreground: #16261f;
+  --paper-edge: #d2e3d8;
+  --km-scroll: #bfd8cb;
+}
+
+/* Royal Indigo — midnight indigo with periwinkle highlights. */
+[data-accent="indigo"] {
+  --km-burgundy: #221f57;
+  --km-wine: #322e78;
+  --km-plum: #4a46a3;
+  --km-gold: #6f66d6;
+  --km-gold-muted: #564eb8;
+  --km-ivory: #eeecfb;
+
+  --primary: #221f57;
+  --primary-foreground: #f6f5ff;
+  --secondary: #e8e6f7;
+  --secondary-foreground: #221f57;
+  --accent: #e4e1fb;
+  --accent-foreground: #221f57;
+  --ring: rgba(111, 102, 214, 0.75);
+
+  --sidebar: #16143f;
+  --sidebar-foreground: #e6e3fa;
+  --sidebar-primary: #6f66d6;
+  --sidebar-primary-foreground: #14123a;
+  --sidebar-accent: #322e78;
+  --sidebar-accent-foreground: #eeecfb;
+  --sidebar-border: rgba(111, 102, 214, 0.22);
+  --sidebar-ring: rgba(111, 102, 214, 0.6);
+
+  --chart-1: #221f57;
+  --chart-2: #6f66d6;
+  --chart-3: #4a46a3;
+  --chart-4: #8f88e8;
+  --chart-5: #322e78;
+
+  --paper: #f4f2fb;
+  --paper-2: #e7e3f7;
+  --paper-foreground: #1e1b3d;
+  --paper-edge: #d8d3ee;
+  --km-scroll: #c4c0e4;
+}
+
+/* Rose — raspberry with blush-gold highlights. */
+[data-accent="rose"] {
+  --km-burgundy: #6b1338;
+  --km-wine: #8a1c47;
+  --km-plum: #a83261;
+  --km-gold: #e59fb4;
+  --km-gold-muted: #c9798f;
+  --km-ivory: #fdeaf0;
+
+  --primary: #6b1338;
+  --primary-foreground: #fff4f7;
+  --secondary: #f9e4ea;
+  --secondary-foreground: #6b1338;
+  --accent: #fbe7ed;
+  --accent-foreground: #6b1338;
+  --ring: rgba(229, 159, 180, 0.8);
+
+  --sidebar: #450b24;
+  --sidebar-foreground: #fbe3ea;
+  --sidebar-primary: #e59fb4;
+  --sidebar-primary-foreground: #450e26;
+  --sidebar-accent: #8a1c47;
+  --sidebar-accent-foreground: #fdeaf0;
+  --sidebar-border: rgba(229, 159, 180, 0.3);
+  --sidebar-ring: rgba(229, 159, 180, 0.6);
+
+  --chart-1: #6b1338;
+  --chart-2: #e59fb4;
+  --chart-3: #a83261;
+  --chart-4: #c9798f;
+  --chart-5: #8a1c47;
+
+  --paper: #fbf2f1;
+  --paper-2: #f5e6e6;
+  --paper-foreground: #2e1a22;
+  --paper-edge: #e9d3d5;
+  --km-scroll: #e2c3cc;
+}
+
+/* Terracotta — warm clay with ochre highlights. */
+[data-accent="terracotta"] {
+  --km-burgundy: #5c2a17;
+  --km-wine: #7a3a1f;
+  --km-plum: #9a4f2b;
+  --km-gold: #d99a4e;
+  --km-gold-muted: #b87a38;
+  --km-ivory: #f9ecdb;
+
+  --primary: #5c2a17;
+  --primary-foreground: #fdf5ea;
+  --secondary: #f4e6d5;
+  --secondary-foreground: #5c2a17;
+  --accent: #f7e9d4;
+  --accent-foreground: #5c2a17;
+  --ring: rgba(217, 154, 78, 0.8);
+
+  --sidebar: #3a1a0d;
+  --sidebar-foreground: #f6e6d3;
+  --sidebar-primary: #d99a4e;
+  --sidebar-primary-foreground: #3a1a0c;
+  --sidebar-accent: #7a3a1f;
+  --sidebar-accent-foreground: #f9ecdb;
+  --sidebar-border: rgba(217, 154, 78, 0.3);
+  --sidebar-ring: rgba(217, 154, 78, 0.6);
+
+  --chart-1: #5c2a17;
+  --chart-2: #d99a4e;
+  --chart-3: #9a4f2b;
+  --chart-4: #b87a38;
+  --chart-5: #7a3a1f;
+
+  --paper: #faf1e4;
+  --paper-2: #f0e1cd;
+  --paper-foreground: #2c1d14;
+  --paper-edge: #e2cdb2;
+  --km-scroll: #dcc4a2;
+}
+
+/* Ocean — deep teal with aqua highlights. */
+[data-accent="ocean"] {
+  --km-burgundy: #0a3446;
+  --km-wine: #0f4a63;
+  --km-plum: #16657f;
+  --km-gold: #57bcd6;
+  --km-gold-muted: #3f9ab3;
+  --km-ivory: #e2f3f8;
+
+  --primary: #0a3446;
+  --primary-foreground: #effafd;
+  --secondary: #dfeef4;
+  --secondary-foreground: #0a3446;
+  --accent: #dcf0f6;
+  --accent-foreground: #0a3446;
+  --ring: rgba(87, 188, 214, 0.8);
+
+  --sidebar: #04212e;
+  --sidebar-foreground: #d8eef6;
+  --sidebar-primary: #57bcd6;
+  --sidebar-primary-foreground: #04212e;
+  --sidebar-accent: #0f4a63;
+  --sidebar-accent-foreground: #e2f3f8;
+  --sidebar-border: rgba(87, 188, 214, 0.3);
+  --sidebar-ring: rgba(87, 188, 214, 0.6);
+
+  --chart-1: #0a3446;
+  --chart-2: #57bcd6;
+  --chart-3: #16657f;
+  --chart-4: #3f9ab3;
+  --chart-5: #0f4a63;
+
+  --paper: #f0f7fa;
+  --paper-2: #e0edf3;
+  --paper-foreground: #16262e;
+  --paper-edge: #cadfe8;
+  --km-scroll: #b7d3de;
+}
+
+/* ---- Palettes — dark -------------------------------------------------- */
+[data-mode="dark"][data-accent="burgundy"] {
+  --km-burgundy: #3d1226;
+  --km-wine: #5a1f38;
+  --km-plum: #7d2f52;
+  --km-gold: #d8b877;
+  --km-gold-muted: #c2a35f;
+  --km-ivory: #f6ecd6;
+
+  --primary: #8f2f52;
+  --primary-foreground: #fff6f1;
+  --secondary: #2a1a21;
+  --secondary-foreground: #f0e2e6;
+  --accent: #331e27;
+  --accent-foreground: #f4e6ea;
+  --ring: rgba(216, 184, 119, 0.7);
+
+  --sidebar: #150509;
+  --sidebar-foreground: #eddfc9;
+  --sidebar-primary: #d8b877;
+  --sidebar-primary-foreground: #170608;
+  --sidebar-accent: #3d1226;
+  --sidebar-accent-foreground: #f6ecd6;
+  --sidebar-border: rgba(216, 184, 119, 0.2);
+  --sidebar-ring: rgba(216, 184, 119, 0.55);
+
+  --chart-1: #d8b877;
+  --chart-2: #a8456b;
+  --chart-3: #7d2f52;
+  --chart-4: #c2a35f;
+  --chart-5: #5a1f38;
+
+  --paper: #241a20;
+  --paper-2: #1c141a;
+  --paper-foreground: #f0e6e2;
+  --paper-edge: #3a2a33;
+}
+
+[data-mode="dark"][data-accent="emerald"] {
+  --km-burgundy: #0b2c23;
+  --km-wine: #12473a;
+  --km-plum: #1e6d55;
+  --km-gold: #6fd0af;
+  --km-gold-muted: #55b394;
+  --km-ivory: #e8f7f0;
+
+  --primary: #3aa886;
+  --primary-foreground: #04150f;
+  --secondary: #16241f;
+  --secondary-foreground: #dcefe6;
+  --accent: #1a2c25;
+  --accent-foreground: #e6f4ec;
+  --ring: rgba(111, 208, 175, 0.7);
+
+  --sidebar: #04150f;
+  --sidebar-foreground: #d6ece2;
+  --sidebar-primary: #6fd0af;
+  --sidebar-primary-foreground: #04150f;
+  --sidebar-accent: #0f3a2e;
+  --sidebar-accent-foreground: #e8f7f0;
+  --sidebar-border: rgba(111, 208, 175, 0.2);
+  --sidebar-ring: rgba(111, 208, 175, 0.55);
+
+  --chart-1: #6fd0af;
+  --chart-2: #2f8f72;
+  --chart-3: #1e6d55;
+  --chart-4: #55b394;
+  --chart-5: #14513f;
+
+  --paper: #14201c;
+  --paper-2: #0f1a16;
+  --paper-foreground: #e6f2ec;
+  --paper-edge: #24382f;
+}
+
+[data-mode="dark"][data-accent="indigo"] {
+  --km-burgundy: #1a1846;
+  --km-wine: #262365;
+  --km-plum: #4a46a3;
+  --km-gold: #8f88e8;
+  --km-gold-muted: #7d76df;
+  --km-ivory: #eceafc;
+
+  --primary: #544dc4;
+  --primary-foreground: #f7f6ff;
+  --secondary: #1e1b3f;
+  --secondary-foreground: #e0ddf7;
+  --accent: #232048;
+  --accent-foreground: #e6e3fa;
+  --ring: rgba(143, 136, 232, 0.7);
+
+  --sidebar: #100e33;
+  --sidebar-foreground: #dedbf7;
+  --sidebar-primary: #8f88e8;
+  --sidebar-primary-foreground: #12103a;
+  --sidebar-accent: #262365;
+  --sidebar-accent-foreground: #eceafc;
+  --sidebar-border: rgba(143, 136, 232, 0.22);
+  --sidebar-ring: rgba(143, 136, 232, 0.6);
+
+  --chart-1: #8f88e8;
+  --chart-2: #544dc4;
+  --chart-3: #4a46a3;
+  --chart-4: #d9c78a;
+  --chart-5: #322e78;
+
+  --paper: #1a1830;
+  --paper-2: #141226;
+  --paper-foreground: #e8e6fb;
+  --paper-edge: #2e2b52;
+}
+
+[data-mode="dark"][data-accent="rose"] {
+  --km-burgundy: #4a0f28;
+  --km-wine: #6b1739;
+  --km-plum: #a83261;
+  --km-gold: #f0b3c5;
+  --km-gold-muted: #d993a8;
+  --km-ivory: #fdeaf0;
+
+  --primary: #ad3a64;
+  --primary-foreground: #fff6f9;
+  --secondary: #2c1620;
+  --secondary-foreground: #f6dde5;
+  --accent: #331a24;
+  --accent-foreground: #fbe7ed;
+  --ring: rgba(240, 179, 197, 0.75);
+
+  --sidebar: #2a0716;
+  --sidebar-foreground: #f7dae4;
+  --sidebar-primary: #f0b3c5;
+  --sidebar-primary-foreground: #32091b;
+  --sidebar-accent: #6b1739;
+  --sidebar-accent-foreground: #fdeaf0;
+  --sidebar-border: rgba(240, 179, 197, 0.28);
+  --sidebar-ring: rgba(240, 179, 197, 0.6);
+
+  --chart-1: #f0b3c5;
+  --chart-2: #ad3a64;
+  --chart-3: #a83261;
+  --chart-4: #d993a8;
+  --chart-5: #8a1c47;
+
+  --paper: #241419;
+  --paper-2: #1c0f14;
+  --paper-foreground: #f4e5ea;
+  --paper-edge: #45262f;
+}
+
+[data-mode="dark"][data-accent="terracotta"] {
+  --km-burgundy: #3a1a0d;
+  --km-wine: #5c2a17;
+  --km-plum: #9a4f2b;
+  --km-gold: #e4ab63;
+  --km-gold-muted: #cf9148;
+  --km-ivory: #f9ecdb;
+
+  --primary: #b05f2b;
+  --primary-foreground: #fff7ee;
+  --secondary: #2b1a11;
+  --secondary-foreground: #f4e6d5;
+  --accent: #301d13;
+  --accent-foreground: #f7e9d4;
+  --ring: rgba(228, 171, 99, 0.75);
+
+  --sidebar: #241007;
+  --sidebar-foreground: #f2e0cb;
+  --sidebar-primary: #e4ab63;
+  --sidebar-primary-foreground: #2a130a;
+  --sidebar-accent: #5c2a17;
+  --sidebar-accent-foreground: #f9ecdb;
+  --sidebar-border: rgba(228, 171, 99, 0.3);
+  --sidebar-ring: rgba(228, 171, 99, 0.6);
+
+  --chart-1: #e4ab63;
+  --chart-2: #b05f2b;
+  --chart-3: #9a4f2b;
+  --chart-4: #cf9148;
+  --chart-5: #7a3a1f;
+
+  --paper: #241a13;
+  --paper-2: #1b130e;
+  --paper-foreground: #f1e4d6;
+  --paper-edge: #3d2c1e;
+}
+
+[data-mode="dark"][data-accent="ocean"] {
+  --km-burgundy: #04212e;
+  --km-wine: #0a3446;
+  --km-plum: #16657f;
+  --km-gold: #6fcbe2;
+  --km-gold-muted: #55b3cc;
+  --km-ivory: #e2f3f8;
+
+  --primary: #17728f;
+  --primary-foreground: #f0fbff;
+  --secondary: #0e2731;
+  --secondary-foreground: #dfeef4;
+  --accent: #102c38;
+  --accent-foreground: #dcf0f6;
+  --ring: rgba(111, 203, 226, 0.75);
+
+  --sidebar: #031620;
+  --sidebar-foreground: #d2ebf4;
+  --sidebar-primary: #6fcbe2;
+  --sidebar-primary-foreground: #03202c;
+  --sidebar-accent: #0a3446;
+  --sidebar-accent-foreground: #e2f3f8;
+  --sidebar-border: rgba(111, 203, 226, 0.28);
+  --sidebar-ring: rgba(111, 203, 226, 0.6);
+
+  --chart-1: #6fcbe2;
+  --chart-2: #17728f;
+  --chart-3: #16657f;
+  --chart-4: #55b3cc;
+  --chart-5: #0f4a63;
+
+  --paper: #0f2029;
+  --paper-2: #0b1a21;
+  --paper-foreground: #e2eff5;
+  --paper-edge: #234050;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-foreground: var(--paper-foreground);
+  --color-paper-edge: var(--paper-edge);
+
+  /* Named brand colours for one-off accents (bg-km-gold, text-km-burgundy…) */
+  --color-km-burgundy: var(--km-burgundy);
+  --color-km-wine: var(--km-wine);
+  --color-km-plum: var(--km-plum);
+  --color-km-gold: var(--km-gold);
+  --color-km-gold-muted: var(--km-gold-muted);
+  --color-km-ivory: var(--km-ivory);
+  --color-km-charcoal: var(--km-charcoal);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Readable system stacks — no remote font dependency. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  /* Elegant serif for selected brand headings — Playfair Display with a
+     Georgia fallback when offline. */
+  --font-display: "Playfair Display", Georgia, "Iowan Old Style", "Palatino Linotype", Palatino,
+    "Times New Roman", serif;
+  --font-serif: "Playfair Display", Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --animate-fade-in: fade-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-rise-in: rise-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-gold-pulse: gold-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes gold-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100dvh;
+  }
+
+  /* Serif only for top-level brand headings; dense UI stays sans. */
+  h1, h2 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  h3, h4 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--km-gold);
+    color: var(--km-burgundy);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Warm, quiet scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--km-scroll) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--km-scroll);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--km-gold-muted);
+    background-clip: content-box;
+  }
+}
+
+/* ==========================================================================
+   Brand surfaces & ornaments
+   ========================================================================== */
+
+@layer components {
+
+/* Warm editorial surface (welcome banners, hero cards). */
+.paper-surface {
+  position: relative;
+  background-color: var(--paper);
+  color: var(--paper-foreground);
+  background-image:
+    radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--km-gold) 12%, transparent) 0, transparent 55%),
+    radial-gradient(circle at 82% 88%, color-mix(in srgb, var(--km-burgundy) 6%, transparent) 0, transparent 60%);
+  isolation: isolate;
+}
+
+/* Fine procedural grain — keeps text readable (very low alpha). */
+.paper-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.28'/%3E%3C/svg%3E");
+  z-index: -1;
+}
+
+/* Warm card surface with a whisper of gold-tinted grain (admin cards). */
+.graphite-surface {
+  position: relative;
+  background-color: var(--card);
+  isolation: isolate;
+}
+
+.graphite-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.3;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  z-index: -1;
+}
+
+/* Attendance Mark tab (phones): flattening of the roster card is handled by
+   responsive utilities on the Card itself (rounded-none/py-0/sm: variants). */
+
+/* Deep burgundy brand surface (login right rail, sidebar accents). */
+.burgundy-surface {
+  position: relative;
+  background-color: var(--km-burgundy);
+  color: var(--km-ivory);
+  isolation: isolate;
+}
+
+/* Torn-paper lower edge for editorial banners */
+.torn-bottom {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='24' preserveAspectRatio='none'%3E%3Cpath d='M0 0h1200v14l-25 5-30-6-28 8-35-7-30 6-40-9-33 8-30-6-38 7-30-8-35 9-30-7-40 6-30-8-35 7-30-6-40 8-30-7-35 6-30-8-40 7-30-6-35 8-30-7-40 6-30-8-35 7-30-6-40 8-30-7-35 6-30-8-40 7-30-6-35 8-30-7-20 4V0z' fill='%23000'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='24' preserveAspectRatio='none'%3E%3Cpath d='M0 0h1200v14l-25 5-30-6-28 8-35-7-30 6-40-9-33 8-30-6-38 7-30-8-35 9-30-7-40 6-30-8-35 7-30-6-40 8-30-7-35 6-30-8-40 7-30-6-35 8-30-7-40 6-30-8-35 7-30-6-40 8-30-7-35 6-30-8-40 7-30-6-35 8-30-7-20 4V0z' fill='%23000'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.paper-lift {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 18px 34px -24px color-mix(in srgb, var(--km-burgundy) 50%, transparent);
+}
+
+.paper-tape {
+  position: absolute;
+  top: -10px;
+  left: 24px;
+  width: 92px;
+  height: 24px;
+  background: color-mix(in srgb, var(--km-gold) 85%, transparent);
+  rotate: -2.5deg;
+  box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--km-burgundy) 60%, transparent);
+}
+
+/* Fine gold rule with a repeating diamond motif — ornamental dividers. */
+.gold-rule {
+  height: 1px;
+  opacity: 0.5;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--km-gold) 0 10px,
+    transparent 10px 16px
+  );
+}
+
+/* Small centred lotus/diamond divider used under brand headings. */
+.ornament-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--km-gold);
+}
+.ornament-divider::before,
+.ornament-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  max-width: 72px;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.7;
+}
+
+/* Subtle palace-arch backdrop for brand moments (login, welcome). */
+.arch-motif {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='160' viewBox='0 0 120 160'%3E%3Cpath d='M60 8C34 8 18 30 18 62v90h84V62C102 30 86 8 60 8z' fill='none' stroke='%23c6a45b' stroke-width='1.2'/%3E%3Cpath d='M60 24C42 24 32 40 32 62v76h56V62c0-22-10-38-28-38z' fill='none' stroke='%23c6a45b' stroke-width='0.8'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: bottom center;
+  background-size: 120px 160px;
+  opacity: 0.14;
+}
+
+/* Soft gold halo used behind logos / active nav markers. */
+.gold-halo {
+  box-shadow: 0 6px 22px -8px color-mix(in srgb, var(--km-gold) 70%, transparent);
+}
+
+} /* @layer components */
+
+/* ==========================================================================
+   Misc utilities
+   ========================================================================== */
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--secondary) 25%, var(--paper) 37%, var(--secondary) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Sidebar brand lockup — heritage display serif + tracked sans subtitle.
+   Scoped ONLY to the sidebar brand: the global --font-display (Playfair) is
+   deliberately left alone so no other heading in the app is affected.
+   ========================================================================== */
+.km-brand-name {
+  font-family: "Cormorant Garamond", "Playfair Display", Georgia, "Iowan Old Style", serif;
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.05;
+  /* Cormorant's caps sit small on the em; this keeps it optically even. */
+  letter-spacing: 1px;
+  /* Pull the trailing sidebearing back so the wordmark reads optically centred. */
+  margin-inline-end: -1px;
+  color: var(--km-ivory);
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+.km-brand-sub {
+  font-family: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 9.5px;
+  line-height: 1.4;
+  /* Airy tracking — pulled back on the right so the last cap doesn't hang. */
+  letter-spacing: 2.6px;
+  margin-inline-end: -2.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--km-gold-muted);
+}
+
+/* Thin rule with a centre lozenge — the crest's separator. */
+.km-brand-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  color: var(--km-gold);
+}
+.km-brand-rule::before,
+.km-brand-rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  opacity: 0.55;
+}
+.km-brand-rule::before {
+  background: linear-gradient(to right, transparent, currentColor);
+}
+.km-brand-rule::after {
+  background: linear-gradient(to left, transparent, currentColor);
+}
+.km-brand-lozenge {
+  width: 4px;
+  height: 4px;
+  flex-shrink: 0;
+  transform: rotate(45deg);
+  background: currentColor;
+}
+
+/* Scanner viewport must stay visually neutral so camera contrast is preserved */
+.scanner-viewport video {
+  object-fit: cover;
+}
+
+/* Respect reduced motion globally (JS motion is also guarded in components). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

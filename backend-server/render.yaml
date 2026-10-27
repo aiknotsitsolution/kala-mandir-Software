@@ -1,0 +1,19 @@
+# Render Blueprint — Kalamandir Dance Institute API
+# Dashboard env vars to set (secret values, not in git):
+#   MONGODB_URI  = your Atlas connection string (include /kalamandir_dance db name)
+#   JWT_SECRET   = long random string
+#   CLIENT_ORIGIN = https://your-frontend.vercel.app
+services:
+  - type: web
+    name: kalamandir-api
+    runtime: node
+    plan: free
+    rootDir: backend-server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: CLIENT_ORIGIN
+        value: http://localhost:5173
