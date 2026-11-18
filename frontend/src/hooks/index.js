@@ -46,6 +46,8 @@ function queryKey(fn, deps) {
  */
 export function useAsync(fn, deps, options) {
     const enabled = options?.enabled ?? true;
+    const pollingInterval = options?.pollingInterval ?? 0;
+    const skipPollingIfUnfocused = options?.skipPollingIfUnfocused ?? false;
     const fnRef = useRef(fn);
     fnRef.current = fn;
     const key = queryKey(fn, deps);
@@ -55,10 +57,13 @@ export function useAsync(fn, deps, options) {
             return;
         registerQueryExecutor(key, () => fnRef.current());
         const request = trigger(key, true);
+        if (pollingInterval > 0) {
+            request.updateSubscriptionOptions({ pollingInterval, skipPollingIfUnfocused });
+        }
         return () => {
             request.unsubscribe();
         };
-    }, [enabled, key, trigger]);
+    }, [enabled, key, pollingInterval, skipPollingIfUnfocused, trigger]);
     const reload = useCallback(() => {
         if (!enabled)
             return;

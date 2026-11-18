@@ -81,18 +81,14 @@ export function SidebarContent({ onNavigate, collapsed = false, onToggleCollapse
         <div className="absolute inset-0 bg-gradient-to-t from-sidebar via-sidebar/25 to-transparent"/>
       </div>
 
-      {/* Brand header — centred crest lockup (emblem, wordmark, rule, subtitle). */}
+      {/* Brand header — full logo above the studio subtitle. */}
       <div className={cn("relative border-b border-sidebar-border/60 transition-[padding] duration-300", collapsed ? "px-3 py-5" : "px-4 py-6")}>
         {!collapsed ? (<div className="flex flex-col items-center gap-2.5 text-center">
-            <span className="gold-halo flex shrink-0 items-center justify-center rounded-xl border border-km-gold/35 bg-km-gold/10 text-km-gold transition-all duration-300 size-11">
-              <KMEmblem className="transition-all duration-300 size-[22px]"/>
-            </span>
-            <p className="km-brand-name whitespace-nowrap">
-              KALA MANDIR
-            </p>
-            <span className="km-brand-rule" aria-hidden="true">
-              <span className="km-brand-lozenge"/>
-            </span>
+            <img
+              src="/images/kalamandir-lotus-logo.png"
+              alt="Kala Mandir — Art, Dance, Creativity"
+              className="h-auto w-full max-w-[220px] object-contain"
+            />
             <p className="km-brand-sub">
               Dance n Art Studio
             </p>

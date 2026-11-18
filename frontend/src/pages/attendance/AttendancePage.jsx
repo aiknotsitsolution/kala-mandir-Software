@@ -281,13 +281,15 @@ export function AttendancePage() {
     const { session } = useAuth();
     const canCorrect = can(session?.profile.role, "attendance.correct");
 
-    /* --------------------- tab state (mark | view | history) ------------------ */
+    /* --------------------- tab state (all | mark | view | history) ------------ */
     const [searchParams, setSearchParams] = useSearchParams();
     const tabParam = searchParams.get("tab");
-    const activeTab = tabParam === "view" || tabParam === "history" || tabParam === "all" ? tabParam : "mark";
+    const activeTab = tabParam === "mark" || tabParam === "view" || tabParam === "history" || tabParam === "all"
+        ? tabParam
+        : "all";
     const setTab = (value) => {
         const next = new URLSearchParams(searchParams);
-        if (value === "mark") next.delete("tab"); else next.set("tab", value);
+        if (value === "all") next.delete("tab"); else next.set("tab", value);
         setSearchParams(next, { replace: true });
     };
 
@@ -346,15 +348,15 @@ export function AttendancePage() {
     // the admin clears the selection (that made the Clear button look broken).
     const autoPickedRef = useRef(false);
     useEffect(() => {
-        if (autoPickedRef.current || activeSlots.length === 0) return;
+        if (activeTab !== "mark" || autoPickedRef.current || activeSlots.length === 0) return;
         const pick = pickLiveSlot(activeSlots);
         autoPickedRef.current = true;
         if (pick) {
             setSlotGroup(slotGroupOf(pick.startTime) ?? "morning");
             setSlotPick(pick.id);
         }
-        // Only on first load — never after a manual Clear.
-    }, [activeSlots]);
+        // Only when Mark is first opened — never after a manual Clear.
+    }, [activeSlots, activeTab]);
 
     // Load the roster automatically whenever the selection/date changes.
     const selectedKey = selectedSlotIds.join(",");
@@ -394,7 +396,7 @@ export function AttendancePage() {
             }
         });
         return { students: [...byId.values()], date: loadedQuery.date };
-    }, [data, loadedQuery], { enabled: !!loadedQuery && loadedQuery.slotIds.length > 0 });
+    }, [data, loadedQuery], { enabled: activeTab === "mark" && !!loadedQuery && loadedQuery.slotIds.length > 0 });
 
     // Seed the status map from the roster whenever it loads.
     useEffect(() => {
@@ -428,7 +430,7 @@ export function AttendancePage() {
     const debouncedQuery = useDebounced(studentQuery, 300);
     const walkInSearch = useAsync(() => (debouncedQuery.trim()
         ? data.listMembers({ search: debouncedQuery.trim(), pageSize: 5 })
-        : Promise.resolve({ items: [] })), [data, debouncedQuery], { enabled: debouncedQuery.trim().length > 0 });
+        : Promise.resolve({ items: [] })), [data, debouncedQuery], { enabled: activeTab === "mark" && debouncedQuery.trim().length > 0 });
     const rosterIds = useMemo(() => new Set(students.map((s) => s.memberId)), [students]);
     const walkIns = useMemo(() => (walkInSearch.data?.items ?? []).filter((m) => !rosterIds.has(m.id) && m.status === "active"), [walkInSearch.data, rosterIds]);
     const [walkInSavingId, setWalkInSavingId] = useState(null);
@@ -530,7 +532,7 @@ export function AttendancePage() {
         return { from: start.toISOString(), to: new Date(start.getTime() + 86_399_999).toISOString() };
     }, [viewDate]);
 
-    const list = useAsync(() => data.listAttendance({ from: dayRange.from, to: dayRange.to, page: 1, pageSize: 100 }), [data, dayRange]);
+    const list = useAsync(() => data.listAttendance({ from: dayRange.from, to: dayRange.to, page: 1, pageSize: 100 }), [data, dayRange], { enabled: activeTab === "view" });
 
     /* --------- View All: attendance by day — one date chip, no filters ------- */
     const [viewAllDate, setViewAllDate] = useState(() => ymdOf(new Date()));
@@ -539,7 +541,7 @@ export function AttendancePage() {
         const start = new Date(y, m - 1, d);
         return { from: start.toISOString(), to: new Date(start.getTime() + 86_399_999).toISOString() };
     }, [viewAllDate]);
-    const viewAllList = useAsync(() => data.listAttendance({ from: viewAllRange.from, to: viewAllRange.to, page: 1, pageSize: 100 }), [data, viewAllRange]);
+    const viewAllList = useAsync(() => data.listAttendance({ from: viewAllRange.from, to: viewAllRange.to, page: 1, pageSize: 100 }), [data, viewAllRange], { enabled: activeTab === "all" });
     const viewAllRows = useMemo(() => (viewAllList.data?.items ?? []).filter((r) => r.attendanceStatus), [viewAllList.data]);
     const viewAllLabel = format(new Date(`${viewAllDate}T00:00:00`), "EEE, d MMM yyyy");
 
@@ -565,15 +567,20 @@ export function AttendancePage() {
        local P/L/A picks, and throttled so one burst = one reload). */
     const hasUnsavedMarks = useMemo(() => students.some((s) => (statuses[s.memberId] ?? null) !== (savedStatuses[s.memberId] ?? null)), [students, statuses, savedStatuses]);
     const lastLiveReloadRef = useRef(0);
+    const reloadSummary = summary.reload;
+    const reloadRoster = roster.reload;
+    const reloadList = list.reload;
+    const reloadViewAllList = viewAllList.reload;
     useEffect(() => subscribeLiveNotification(() => {
         const now = Date.now();
         if (hasUnsavedMarks || now - lastLiveReloadRef.current < 2500)
             return;
         lastLiveReloadRef.current = now;
-        summary.reload();
-        roster.reload();
-        list.reload();
-    }), [hasUnsavedMarks, summary.reload, roster.reload, list.reload]);
+        reloadSummary();
+        if (activeTab === "mark") reloadRoster();
+        if (activeTab === "view") reloadList();
+        if (activeTab === "all") reloadViewAllList();
+    }), [activeTab, hasUnsavedMarks, reloadSummary, reloadRoster, reloadList, reloadViewAllList]);
 
     /** slotId → slot lookup, so a row can show its class time ("7:00 AM – 8:15 AM").
      *  Uses the FULL slot list (not just active) so archived slots still resolve. */
@@ -669,17 +676,17 @@ export function AttendancePage() {
             Mark attendance for students and view past records — all in one place.
           </p>
         </div>
-        <div className="grid w-full grid-cols-4 gap-1.5 sm:gap-3 xl:w-auto">
-          <StatCard label="Total Students" value={summaryData?.totalStudents ?? 0} icon={<UsersIcon className="size-4"/>} tone="neutral"/>
-          <StatCard label="Present Today" value={summaryData?.presentToday ?? 0} icon={<CheckCircle2Icon className="size-4"/>} tone="present"/>
-          <StatCard label="Absent Today" value={summaryData?.absentToday ?? 0} icon={<XCircleIcon className="size-4"/>} tone="absent"/>
-          <StatCard label="Attendance Rate" value={`${summaryData?.attendanceRate ?? 0}%`} icon={<GaugeIcon className="size-4"/>} tone="rate"/>
-        </div>
+       
       </div>
 
-      {/* ------------- Tabs: Mark | View | Attendance history ------------- */}
-      <Tabs defaultValue="mark" value={activeTab} onValueChange={setTab} className="space-y-6">
+      {/* ------------- Tabs: View All | Mark | View | Attendance history ------------- */}
+      <Tabs defaultValue="all" value={activeTab} onValueChange={setTab} className="space-y-6">
       <TabsList className="h-auto w-full rounded-full justify-start gap-1 bg-muted p-1.5" style={{ height: "auto" }}>
+          <TabsTrigger value="all" className="h-11 flex-1 rounded-full px-2 py-0 text-[11px] font-medium [&>svg]:text-foreground/80 data-[state=active]:font-semibold data-[state=active]:[&>svg]:text-primary sm:h-auto sm:flex-none sm:px-4 sm:py-1 sm:text-sm">
+            <ListIcon className="size-4"/>
+            <span>View All</span>
+          </TabsTrigger>
+          <span aria-hidden="true" className="h-5 w-px shrink-0 self-center bg-foreground/15"/>
           <TabsTrigger value="mark" className="h-11 flex-1 rounded-full px-2 py-0 text-[11px] font-medium [&>svg]:text-foreground/80 data-[state=active]:font-semibold data-[state=active]:[&>svg]:text-primary sm:h-auto sm:flex-none sm:px-4 sm:py-1 sm:text-sm">
             <ClipboardCheckIcon className="size-4"/>
             <span className="sm:hidden">Mark</span>
@@ -697,13 +704,13 @@ export function AttendancePage() {
             <span className="sm:hidden">History</span>
             <span className="hidden sm:inline">Attendance History</span>
           </TabsTrigger>
-          <span aria-hidden="true" className="h-5 w-px shrink-0 self-center bg-foreground/15"/>
-          <TabsTrigger value="all" className="h-11 flex-1 rounded-full px-2 py-0 text-[11px] font-medium [&>svg]:text-foreground/80 data-[state=active]:font-semibold data-[state=active]:[&>svg]:text-primary sm:h-auto sm:flex-none sm:px-4 sm:py-1 sm:text-sm">
-            <ListIcon className="size-4"/>
-            <span>View All</span>
-          </TabsTrigger>
         </TabsList>
-
+ <div className="grid w-full grid-cols-4 gap-1.5 sm:gap-3 xl:w-auto">
+          <StatCard label="Total Students" value={summaryData?.totalStudents ?? 0} icon={<UsersIcon className="size-4"/>} tone="neutral"/>
+          <StatCard label="Present Today" value={summaryData?.presentToday ?? 0} icon={<CheckCircle2Icon className="size-4"/>} tone="present"/>
+          <StatCard label="Absent Today" value={summaryData?.absentToday ?? 0} icon={<XCircleIcon className="size-4"/>} tone="absent"/>
+          <StatCard label="Attendance Rate" value={`${summaryData?.attendanceRate ?? 0}%`} icon={<GaugeIcon className="size-4"/>} tone="rate"/>
+        </div>
         <TabsContent value="mark">
         {/* Mobile: roster filters sit right under the tab bar, outside the
             card — the roster below is its own card (mobile-first spec). */}
@@ -725,6 +732,8 @@ export function AttendancePage() {
             onSearch={setStudentQuery}
           />
         </div>
+
+        
       <Card className="rounded-none border-0 bg-transparent py-0 shadow-none sm:rounded-xl sm:border sm:border-border/70 sm:bg-card sm:py-6 sm:shadow-sm">
         <CardContent className="space-y-2.5 p-2 sm:space-y-5 sm:p-5">
 

@@ -11,6 +11,8 @@ export const queryApi = createApi({
     baseQuery: fakeBaseQuery(),
     tagTypes: ["Data"],
     refetchOnMountOrArgChange: 30,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
     endpoints: (builder) => ({
         executeQuery: builder.query({
             async queryFn(key) {

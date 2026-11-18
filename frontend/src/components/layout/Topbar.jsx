@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/auth/AuthProvider";
+import { useAsync } from "@/hooks";
 import { NotificationBellPanel } from "@/components/shared/NotificationBellPanel";
 import { StudentSearchBox } from "@/components/shared/StudentSearchBox";
 import { SmartImage } from "@/components/shared/SmartImage";
@@ -16,53 +17,54 @@ import { appVersion } from "@/config/env";
 export function Topbar({ onOpenMenu }) {
     const { session, data, signOut } = useAuth();
     const navigate = useNavigate();
-    const [unread, setUnread] = useState(0);
+    const notifications = useAsync(
+        () => data.listNotifications({ unreadOnly: true, limit: 5 }),
+        [data],
+        { enabled: Boolean(data), pollingInterval: 30_000, skipPollingIfUnfocused: true },
+    );
+    const notificationRows = notifications.data ?? [];
+    const unread = notificationRows.length;
     const seenIdsRef = useRef(new Set());
     // The very first poll just seeds the badge — popups fire only for events
     // that arrive AFTER the page mounted (otherwise every unread would toast).
     const firstLoadRef = useRef(true);
     useEffect(() => {
-        if (!data)
+        if (!notifications.data)
             return;
-        let cancelled = false;
-        const refresh = () => void data
-            .listNotifications({ unreadOnly: true, limit: 5 })
-            .then((rows) => {
-                if (cancelled)
-                    return;
-                for (const n of rows) {
-                    if (!seenIdsRef.current.has(n.id)) {
-                        seenIdsRef.current.add(n.id);
-                        if (!firstLoadRef.current) {
-                            // Live popup — something arrived while the page was open.
-                            toast(n.title, {
-                                description: n.body,
-                                duration: 6000,
-                                action: n.link
-                                    ? { label: "View", onClick: () => navigate(n.link) }
-                                    : undefined,
-                            });
-                            // Let open pages (Attendance…) react without a refresh.
-                            emitLiveNotification(n);
-                        }
-                    }
+        for (const n of notifications.data) {
+            if (!seenIdsRef.current.has(n.id)) {
+                seenIdsRef.current.add(n.id);
+                if (!firstLoadRef.current) {
+                    // Live popup — something arrived while the page was open.
+                    toast(n.title, {
+                        description: n.body,
+                        duration: 6000,
+                        action: n.link
+                            ? { label: "View", onClick: () => navigate(n.link) }
+                            : undefined,
+                    });
+                    // Let open pages (Attendance…) react without a refresh.
+                    emitLiveNotification(n);
                 }
-                firstLoadRef.current = false;
-                // Keep the seen-set bounded on long sessions.
-                if (seenIdsRef.current.size > 200) {
-                    seenIdsRef.current = new Set([...seenIdsRef.current].slice(-100));
-                }
-                setUnread(rows.length);
-            })
-            .catch(() => undefined);
-        refresh();
-        // Keep the bell badge fresh without a page reload.
-        const timer = window.setInterval(refresh, 10_000);
-        return () => {
-            cancelled = true;
-            window.clearInterval(timer);
-        };
-    }, [data, navigate]);
+            }
+        }
+        firstLoadRef.current = false;
+        // Keep the seen-set bounded on long sessions.
+        if (seenIdsRef.current.size > 200) {
+            seenIdsRef.current = new Set([...seenIdsRef.current].slice(-100));
+        }
+    }, [notifications.data, navigate]);
+    const notificationErrorRef = useRef(null);
+    useEffect(() => {
+        if (!notifications.error) {
+            notificationErrorRef.current = null;
+            return;
+        }
+        if (notificationErrorRef.current === notifications.error)
+            return;
+        notificationErrorRef.current = notifications.error;
+        toast.error("Unable to refresh notifications.");
+    }, [notifications.error]);
     const fetchNotifications = useCallback(async () => (await data?.listNotifications({ limit: 12 })) ?? [], [data]);
     const profile = session?.profile;
     const fullName = profile?.fullName?.trim() || "User";
@@ -84,13 +86,11 @@ export function Topbar({ onOpenMenu }) {
           <NotificationBellPanel unreadCount={unread} fetchItems={fetchNotifications} onOpenItem={async (item) => {
             if (!item.isRead) {
                 await data.markNotificationRead(item.id);
-                setUnread((count) => Math.max(0, count - 1));
             }
             if (item.link)
                 navigate(item.link);
         }} onMarkAllRead={async () => {
             await data.markAllNotificationsRead();
-            setUnread(0);
         }} onViewAll={() => navigate("/notifications")}/>
 
           <DropdownMenu>

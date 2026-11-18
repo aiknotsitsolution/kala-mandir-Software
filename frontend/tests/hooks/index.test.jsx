@@ -8,8 +8,8 @@ import { store } from "@/store";
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 const sharedKey = "shared-query";
 
-function QueryConsumer({ enabled = true }) {
-    const query = useAsync(() => request(), [sharedKey], { enabled });
+function QueryConsumer({ enabled = true, pollingInterval = 0 }) {
+    const query = useAsync(() => request(), [sharedKey], { enabled, pollingInterval });
     return (
       <>
         <span data-testid="query-state">{query.status}</span>
@@ -27,6 +27,7 @@ describe("useAsync Redux query cache", () => {
     afterEach(() => {
         cleanup();
         store.dispatch(queryApi.util.resetApiState());
+        vi.useRealTimers();
     });
 
     it("deduplicates the same active request across consumers", async () => {
@@ -75,5 +76,25 @@ describe("useAsync Redux query cache", () => {
         );
 
         await waitFor(() => expect(screen.getByTestId("query-state")).toHaveTextContent("failed"));
+    });
+
+    it("polls at the configured interval", async () => {
+        vi.useFakeTimers();
+        render(
+          <Provider store={store}>
+            <QueryConsumer pollingInterval={1_000} />
+          </Provider>,
+        );
+
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(request).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1_000);
+        });
+        expect(request).toHaveBeenCalledTimes(2);
     });
 });

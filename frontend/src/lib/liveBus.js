@@ -1,7 +1,7 @@
 /**
  * Tiny pub/sub for live studio events.
  *
- * The Topbar polls notifications every 10s for the bell badge; when something
+ * The Topbar polls notifications every 30s for the bell badge; when something
  * genuinely NEW arrives (e.g. a student scanned the studio QR from the door),
  * it is broadcast here so any open page can react live — Attendance reloads
  * its roster/register/state cards without a manual refresh.

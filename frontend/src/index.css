@@ -885,24 +885,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ==========================================================================
-   Sidebar brand lockup — heritage display serif + tracked sans subtitle.
-   Scoped ONLY to the sidebar brand: the global --font-display (Playfair) is
-   deliberately left alone so no other heading in the app is affected.
-   ========================================================================== */
-.km-brand-name {
-  font-family: "Cormorant Garamond", "Playfair Display", Georgia, "Iowan Old Style", serif;
-  font-weight: 600;
-  font-size: 22px;
-  line-height: 1.05;
-  /* Cormorant's caps sit small on the em; this keeps it optically even. */
-  letter-spacing: 1px;
-  /* Pull the trailing sidebearing back so the wordmark reads optically centred. */
-  margin-inline-end: -1px;
-  color: var(--km-ivory);
-  font-feature-settings: "kern" 1, "liga" 1;
-}
-
+/* Sidebar studio subtitle below the logo. */
 .km-brand-sub {
   font-family: "Montserrat", ui-sans-serif, system-ui, sans-serif;
   font-weight: 500;
@@ -914,35 +897,6 @@
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--km-gold-muted);
-}
-
-/* Thin rule with a centre lozenge — the crest's separator. */
-.km-brand-rule {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  color: var(--km-gold);
-}
-.km-brand-rule::before,
-.km-brand-rule::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  opacity: 0.55;
-}
-.km-brand-rule::before {
-  background: linear-gradient(to right, transparent, currentColor);
-}
-.km-brand-rule::after {
-  background: linear-gradient(to left, transparent, currentColor);
-}
-.km-brand-lozenge {
-  width: 4px;
-  height: 4px;
-  flex-shrink: 0;
-  transform: rotate(45deg);
-  background: currentColor;
 }
 
 /* Scanner viewport must stay visually neutral so camera contrast is preserved */
