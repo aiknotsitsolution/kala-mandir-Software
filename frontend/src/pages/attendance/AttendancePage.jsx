@@ -89,7 +89,7 @@ function PaymentChip({ method }) {
  *    the tab bar (slot-group chip, time chip, clickable date chip, search
  *    field), then the roster flows as plain student cards.
  *  - variant="inline": sm+ toolbar row — unchanged desktop flow, h-8 fields. */
-function SlotFilters({ variant, slotsLoading, activeSlots, loadAll, slotGroup, slotPick, markDate, studentQuery, groupedSlots, currentGroupSlots, onSlotGroup, onSlotPick, onDate, onSearch }) {
+function SlotFilters({ variant, slotsLoading, activeSlots, loadAll, slotGroup, slotPick, markDate, studentQuery, trainerFilter, trainerOptions, hasUnassignedTrainer, groupedSlots, currentGroupSlots, onSlotGroup, onSlotPick, onDate, onSearch, onTrainerChange }) {
     const chip = variant === "chip";
     const disabled = slotsLoading || activeSlots.length === 0 || loadAll;
     const groupOpts = (<>
@@ -151,6 +151,11 @@ function SlotFilters({ variant, slotsLoading, activeSlots, loadAll, slotGroup, s
           <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/>
           <Input aria-label="Search student" placeholder="Search" value={studentQuery} onChange={(e) => onSearch(e.target.value)} className="h-8 w-full rounded-full border-input bg-secondary pl-7 pr-2 text-[11px]"/>
         </div>
+        <select aria-label="Trainer" className={`${pillCls} min-w-0`} value={trainerFilter} onChange={(e) => onTrainerChange(e.target.value)}>
+          <option value="">All trainers</option>
+          {trainerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+          {hasUnassignedTrainer ? <option value="__no_trainer__">No trainer</option> : null}
+        </select>
       </div>);
     }
 
@@ -178,6 +183,16 @@ function SlotFilters({ variant, slotsLoading, activeSlots, loadAll, slotGroup, s
         <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/>
         <Input aria-label="Search student" placeholder="Search student" value={studentQuery} onChange={(e) => onSearch(e.target.value)} className="h-8 w-full rounded-md border-input bg-background pl-7 text-xs"/>
       </div>
+      <select
+        aria-label="Trainer"
+        className="h-8 w-auto max-w-44 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+        value={trainerFilter}
+        onChange={(e) => onTrainerChange(e.target.value)}
+      >
+        <option value="">All trainers</option>
+        {trainerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+        {hasUnassignedTrainer ? <option value="__no_trainer__">No trainer</option> : null}
+      </select>
     </div>);
 }
 
@@ -361,10 +376,11 @@ export function AttendancePage() {
     const [savingAll, setSavingAll] = useState(false); // bulk Save button
     const [editingId, setEditingId] = useState(null); // saved row being edited
     const [studentQuery, setStudentQuery] = useState("");
+    const [trainerFilter, setTrainerFilter] = useState("");
 
     // Auto-select the live (or next) slot ONCE so the panel opens on whichever
     // class is running right now. A ref guard keeps it from re-picking after
-    // the admin clears the selection (that made the Clear button look broken).
+    // the admin changes the selection.
     const autoPickedRef = useRef(false);
     useEffect(() => {
         if (activeTab !== "mark" || autoPickedRef.current || activeSlots.length === 0) return;
@@ -374,7 +390,7 @@ export function AttendancePage() {
             setSlotGroup(slotGroupOf(pick.startTime) ?? "morning");
             setSlotPick(pick.id);
         }
-        // Only when Mark is first opened — never after a manual Clear.
+        // Only when Mark is first opened — never after a manual selection change.
     }, [activeSlots, activeTab]);
 
     // Load the roster automatically whenever the selection/date changes.
@@ -430,13 +446,20 @@ export function AttendancePage() {
     // The roster endpoint returns every active studio member for the selected
     // slot, including existing marks for students who are not enrolled in it.
     const students = useMemo(() => roster.data?.students ?? [], [roster.data]);
-    // Filter the full roster by student name or ID.
+    const trainerOptions = useMemo(() => [...new Set(students
+        .map((student) => student.trainerName?.trim())
+        .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [students]);
+    const hasUnassignedTrainer = students.some((student) => !student.trainerName?.trim());
+    // Filter the full roster by student name, ID, and assigned trainer.
     const filteredStudents = useMemo(() => {
         const q = studentQuery.trim().toLowerCase();
-        if (!q) return students;
-        return students.filter((s) => (s.fullName ?? "").toLowerCase().includes(q) ||
-            (s.memberCode ?? "").toLowerCase().includes(q));
-    }, [students, studentQuery]);
+        return students.filter((student) => {
+            if (trainerFilter === "__no_trainer__" && student.trainerName?.trim()) return false;
+            if (trainerFilter && trainerFilter !== "__no_trainer__" && student.trainerName?.trim() !== trainerFilter) return false;
+            return !q || (student.fullName ?? "").toLowerCase().includes(q) ||
+                (student.memberCode ?? "").toLowerCase().includes(q);
+        });
+    }, [students, studentQuery, trainerFilter]);
 
     /* ------------------------------ walk-in students ------------------------- */
     // Students from OTHER slots who show up at a different time: search finds
@@ -765,12 +788,16 @@ export function AttendancePage() {
             slotPick={slotPick}
             markDate={markDate}
             studentQuery={studentQuery}
+            trainerFilter={trainerFilter}
+            trainerOptions={trainerOptions}
+            hasUnassignedTrainer={hasUnassignedTrainer}
             groupedSlots={groupedSlots}
             currentGroupSlots={currentGroupSlots}
             onSlotGroup={handleSlotGroup}
             onSlotPick={handleSlotPick}
             onDate={setMarkDate}
             onSearch={setStudentQuery}
+            onTrainerChange={setTrainerFilter}
           />
         </div>
 
@@ -798,14 +825,7 @@ export function AttendancePage() {
                 </span>
                 {instructorNames.length > 0 ? (<Badge variant="outline" className="max-w-32 gap-1 border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                     <UsersIcon className="size-2.5 shrink-0"/> <span className="truncate">{instructorNames.join(", ")}</span>
-                  </Badge>) : (<span className="text-[10px] text-muted-foreground">No instructor</span>)}
-                <Button size="sm" variant="ghost" className="h-6 gap-0.5 rounded-full px-1.5 text-[10px]" aria-label="Clear slot selection" onClick={() => {
-                  setLoadAll(false);
-                  setSlotGroup("all");
-                  setSlotPick("");
-                }}>
-                  <XIcon className="size-2.5"/> Clear
-                </Button>
+                  </Badge>) : null}
               </div>
               {/* sm+: descriptive info row */}
               <div className="hidden flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:flex">
@@ -813,14 +833,7 @@ export function AttendancePage() {
                 {detailText}
                 {instructorNames.length > 0 ? (<Badge variant="outline" className="gap-1 border-primary/30 bg-primary/10 px-2 py-0 font-medium text-primary">
                     <UsersIcon className="size-3"/> {instructorNames.join(", ")}
-                  </Badge>) : (<span>No instructor assigned</span>)}
-                <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" aria-label="Clear slot selection" onClick={() => {
-                  setLoadAll(false);
-                  setSlotGroup("all");
-                  setSlotPick("");
-                }}>
-                  <XIcon className="size-3"/> Clear
-                </Button>
+                  </Badge>) : null}
               </div>
             </>);
           })() : null}
@@ -852,12 +865,16 @@ export function AttendancePage() {
                 slotPick={slotPick}
                 markDate={markDate}
                 studentQuery={studentQuery}
+                trainerFilter={trainerFilter}
+                trainerOptions={trainerOptions}
+                hasUnassignedTrainer={hasUnassignedTrainer}
                 groupedSlots={groupedSlots}
                 currentGroupSlots={currentGroupSlots}
                 onSlotGroup={handleSlotGroup}
                 onSlotPick={handleSlotPick}
                 onDate={setMarkDate}
                 onSearch={setStudentQuery}
+                onTrainerChange={setTrainerFilter}
               />
             </div>
 
@@ -870,7 +887,7 @@ export function AttendancePage() {
               </div>) : roster.loading ? (<div className="px-2 py-5 text-center text-sm text-muted-foreground sm:px-4 sm:py-8">Loading students…</div>) : students.length === 0 ? (<div className="px-2 py-5 text-center text-sm text-muted-foreground sm:px-4 sm:py-8">
                 No student in this slot.
               </div>) : filteredStudents.length === 0 ? (<div className="px-2 py-5 text-center text-sm text-muted-foreground sm:px-4 sm:py-8">
-                No students match “{studentQuery.trim()}”.
+                    No students match the selected filters.
               </div>) : (<ul className="space-y-2 p-0 sm:space-y-0 sm:divide-y sm:divide-border/60 sm:p-0">
                 {filteredStudents.map((s) => {
               const saved = savedStatuses[s.memberId] ?? null;

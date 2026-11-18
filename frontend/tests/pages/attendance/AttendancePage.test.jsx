@@ -49,8 +49,8 @@ describe("AttendancePage tabs and data loading", () => {
             })),
             getClassRoster: vi.fn(async () => ({
                 students: [
-                    { memberId: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", enrolled: true, attendanceStatus: "present" },
-                    { memberId: "m2", fullName: "Riya Shah", memberCode: "KM-002", enrolled: false, attendanceStatus: "absent" },
+                    { memberId: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", enrolled: true, trainerName: "Maya Joshi", attendanceStatus: "present" },
+                    { memberId: "m2", fullName: "Riya Shah", memberCode: "KM-002", enrolled: false, trainerName: "Neha Shah", attendanceStatus: "absent" },
                 ],
             })),
         });
@@ -91,5 +91,16 @@ describe("AttendancePage tabs and data loading", () => {
         expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
         expect(screen.getByText("Riya Shah")).toBeInTheDocument();
         expect(screen.getAllByRole("button", { name: "Edit attendance for Riya Shah" })).toHaveLength(2);
+    });
+
+    it("filters the Mark Attendance roster by trainer name", async () => {
+        const user = userEvent.setup();
+        renderPage("/attendance?tab=mark");
+
+        expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
+        await user.selectOptions(screen.getAllByRole("combobox", { name: "Trainer" })[0], "Neha Shah");
+
+        expect(screen.getByText("Riya Shah")).toBeInTheDocument();
+        expect(screen.queryByText("Asha Kapoor")).not.toBeInTheDocument();
     });
 });
