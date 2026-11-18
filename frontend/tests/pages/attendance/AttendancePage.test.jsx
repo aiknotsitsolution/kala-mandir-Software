@@ -7,7 +7,16 @@ import { queryApi } from "@/data/api/queryApi";
 import { AttendancePage } from "@/pages/attendance/AttendancePage";
 import { store } from "@/store";
 
-const { mockData } = vi.hoisted(() => ({ mockData: {} }));
+const { mockData, mockDownloadCsv, mockToCsv } = vi.hoisted(() => ({
+    mockData: {},
+    mockDownloadCsv: vi.fn(),
+    mockToCsv: vi.fn((rows) => rows.map((row) => row.memberName).join(",")),
+}));
+
+vi.mock("@/lib/csv", () => ({
+    downloadCsv: mockDownloadCsv,
+    toCsv: mockToCsv,
+}));
 
 vi.mock("@/auth/AuthProvider", () => ({
     useAuth: () => ({ session: { profile: { id: "owner", role: "owner" } } }),
@@ -27,6 +36,8 @@ function renderPage(initialEntry = "/attendance") {
 describe("AttendancePage tabs and data loading", () => {
     beforeEach(() => {
         store.dispatch(queryApi.util.resetApiState());
+        mockDownloadCsv.mockReset();
+        mockToCsv.mockClear();
         Object.assign(mockData, {
             getClassDaySummary: vi.fn(async () => ({})),
             listClassSlots: vi.fn(async () => [{
@@ -102,5 +113,31 @@ describe("AttendancePage tabs and data loading", () => {
 
         expect(screen.getByText("Riya Shah")).toBeInTheDocument();
         expect(screen.queryByText("Asha Kapoor")).not.toBeInTheDocument();
+    });
+
+    it("searches attendance history and exports only matching records to CSV", async () => {
+        const user = userEvent.setup();
+        const records = [
+            { id: "a1", memberId: "m1", memberName: "Asha Kapoor", memberCode: "KM-001", status: "checked_in", checkIn: "2026-11-18T09:00:00.000Z", method: "qr" },
+            { id: "a2", memberId: "m2", memberName: "Riya Shah", memberCode: "KM-002", status: "checked_in", checkIn: "2026-11-18T10:00:00.000Z", method: "manual" },
+        ];
+        mockData.listAttendance = vi.fn(async ({ page, pageSize }) => ({
+            items: records.slice((page - 1) * pageSize, page * pageSize),
+            total: records.length,
+            page,
+            pageSize,
+        }));
+        renderPage("/attendance?tab=history&from=2026-11-18&to=2026-11-18");
+
+        expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
+        await user.type(screen.getByRole("textbox", { name: "Search student" }), "Riya");
+
+        expect(await screen.findByText("Riya Shah")).toBeInTheDocument();
+        expect(screen.queryByText("Asha Kapoor")).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Export CSV" }));
+
+        await waitFor(() => expect(mockDownloadCsv).toHaveBeenCalledTimes(1));
+        expect(mockToCsv.mock.calls[0][0].map((record) => record.memberName)).toEqual(["Riya Shah"]);
+        expect(mockDownloadCsv.mock.calls[0][0]).toContain("search-Riya");
     });
 });

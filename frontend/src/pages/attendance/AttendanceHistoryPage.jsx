@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, Loader2Icon, PencilIcon, } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, Loader2Icon, PencilIcon, SearchIcon, } from "lucide-react";
 import { subscribeLiveNotification } from "@/lib/liveBus";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/States";
 import { SmartImage } from "@/components/shared/SmartImage";
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table";
 import { useAuth, useData } from "@/auth/AuthProvider";
-import { useAsync } from "@/hooks";
+import { useAsync, useDebounced } from "@/hooks";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { addDays, ymdInTz } from "@/lib/datetime";
 import { formatDateTime, formatNumberIN } from "@/lib/format";
@@ -29,6 +29,7 @@ const DEFAULT_RANGE_DAYS = 7;
 const EXPORT_PAGE_SIZE = 200;
 /** Safety net so a huge filter cannot loop forever while exporting. */
 const MAX_EXPORT_PAGES = 25;
+const SEARCH_PAGE_SIZE = 100;
 const STATUS_STYLES = {
     checked_in: "border-primary/30 bg-primary/10 text-primary",
     checked_out: "border-border bg-muted text-muted-foreground",
@@ -43,6 +44,23 @@ function defaultFrom() {
 }
 function defaultTo() {
     return ymdInTz(new Date());
+}
+async function listAllAttendanceForSearch(data, query) {
+    const firstPage = await data.listAttendance({ ...query, page: 1, pageSize: SEARCH_PAGE_SIZE });
+    const pageSize = firstPage.pageSize || SEARCH_PAGE_SIZE;
+    const pageCount = Math.ceil(firstPage.total / pageSize);
+    if (pageCount <= 1)
+        return firstPage.items;
+    const remainingPages = await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) => data.listAttendance({
+        ...query,
+        page: index + 2,
+        pageSize,
+    })));
+    return [...firstPage.items, ...remainingPages.flatMap((page) => page.items)];
+}
+function matchesSearch(record, query) {
+    const normalized = query.trim().toLocaleLowerCase();
+    return !normalized || `${record.memberName ?? ""} ${record.memberCode ?? ""}`.toLocaleLowerCase().includes(normalized);
 }
 function AttendanceBadge({ status }) {
     return (<Badge variant="outline" className={cn("font-medium", STATUS_STYLES[status])}>
@@ -70,11 +88,17 @@ export function AttendanceHistoryContent() {
     });
     const [status, setStatus] = useState("all");
     const [page, setPage] = useState(1);
+    const [search, setSearch] = useState("");
     const [editing, setEditing] = useState(null);
     const [exporting, setExporting] = useState(false);
+    const debouncedSearch = useDebounced(search, 300);
+    const searchActive = search.trim().length > 0;
+    const searchSettled = search.trim() === debouncedSearch.trim();
     const rangeValid = from.length > 0 && to.length > 0 && from <= to;
     const query = useMemo(() => ({ from, to, status, page, pageSize: PAGE_SIZE }), [from, to, status, page]);
-    const list = useAsync(() => data.listAttendance(query), [data, query], { enabled: rangeValid });
+    const searchQuery = useMemo(() => ({ from, to, status }), [from, to, status]);
+    const list = useAsync(() => data.listAttendance(query), [data, query], { enabled: rangeValid && !searchActive });
+    const searchList = useAsync(() => listAllAttendanceForSearch(data, searchQuery), [data, searchQuery], { enabled: rangeValid && debouncedSearch.trim().length > 0 });
     /* Live refresh — a fresh studio QR check-in appears in history without a
        manual refresh (throttled bursts make it one reload, not five). */
     const lastLiveReloadRef = useRef(0);
@@ -83,8 +107,11 @@ export function AttendanceHistoryContent() {
         if (now - lastLiveReloadRef.current < 2500)
             return;
         lastLiveReloadRef.current = now;
-        list.reload();
-    }), [list.reload]);
+        if (searchActive)
+            searchList.reload();
+        else
+            list.reload();
+    }), [list.reload, searchActive, searchList.reload]);
     // A shrunken result set can leave us stranded past the last page — snap back.
     useEffect(() => {
         if (!list.data)
@@ -97,13 +124,26 @@ export function AttendanceHistoryContent() {
         setFrom(defaultFrom());
         setTo(defaultTo());
         setStatus("all");
+        setSearch("");
         setPage(1);
     };
-    const items = list.data?.items ?? [];
-    const total = list.data?.total ?? 0;
+    const searchItems = useMemo(() => (searchList.data ?? []).filter((record) => matchesSearch(record, debouncedSearch)), [searchList.data, debouncedSearch]);
+    const total = searchActive ? searchItems.length : list.data?.total ?? 0;
+    useEffect(() => {
+        if (!searchActive)
+            return;
+        const searchTotalPages = Math.max(1, Math.ceil(searchItems.length / PAGE_SIZE));
+        if (page > searchTotalPages)
+            setPage(searchTotalPages);
+    }, [page, searchActive, searchItems.length]);
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const firstRow = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
     const lastRow = Math.min(page * PAGE_SIZE, total);
+    const items = searchActive
+        ? searchItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+        : list.data?.items ?? [];
+    const loading = searchActive ? searchList.loading || !searchSettled : list.loading;
+    const error = searchActive ? searchList.error : list.error;
     const handleExport = () => {
         if (exporting || !rangeValid)
             return;
@@ -128,11 +168,15 @@ export function AttendanceHistoryContent() {
                         break;
                     currentPage += 1;
                 }
-                if (collected.length === 0) {
+                const matchingRecords = collected.filter((record) => matchesSearch(record, search));
+                if (matchingRecords.length === 0) {
                     toast.info("Nothing to export for these filters.");
                     return;
                 }
-                downloadCsv(`attendance-${from}-to-${to}${status === "all" ? "" : `-${status}`}`, toCsv(collected, [
+                const searchSuffix = search.trim()
+                    ? `-search-${search.trim().replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "")}`
+                    : "";
+                downloadCsv(`attendance-${from}-to-${to}${status === "all" ? "" : `-${status}`}${searchSuffix}`, toCsv(matchingRecords, [
                     { header: "Student", accessor: (row) => row.memberName ?? "" },
                     { header: "Student ID", accessor: (row) => row.memberCode ?? "" },
                     { header: "Slot", accessor: (row) => row.meta?.slotName ?? "" },
@@ -146,7 +190,7 @@ export function AttendanceHistoryContent() {
                     { header: "Scanner", accessor: (row) => row.scannerName ?? "" },
                     { header: "Notes", accessor: (row) => row.notes ?? "" },
                 ]));
-                toast.success(`Exported ${collected.length} ${collected.length === 1 ? "record" : "records"}`);
+                toast.success(`Exported ${matchingRecords.length} ${matchingRecords.length === 1 ? "record" : "records"}`);
             }
             catch (error) {
                 toast.error(error instanceof Error ? error.message : "Unable to export these attendance records.");
@@ -160,7 +204,7 @@ export function AttendanceHistoryContent() {
       {/* Filters */}
       <Card className="graphite-surface gap-0 border-border/70 py-4 sm:py-5">
         <CardContent className="flex flex-col gap-3 px-4 sm:px-5 lg:flex-row lg:items-end">
-          <div className="grid flex-1 gap-3 sm:grid-cols-3">
+          <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
               <Label htmlFor="history-from">From</Label>
               <Input id="history-from" type="date" value={from} max={to || undefined} onChange={(event) => {
@@ -191,12 +235,29 @@ export function AttendanceHistoryContent() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="history-search">Search student</Label>
+              <div className="relative">
+                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
+                <Input
+                  id="history-search"
+                  aria-label="Search student"
+                  placeholder="Name or student ID"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setPage(1);
+                  }}
+                  className="pl-8"
+                />
+              </div>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" onClick={resetFilters}>
               Reset
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting || !rangeValid || list.loading}>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting || !rangeValid || loading}>
               {exporting ? <Loader2Icon className="animate-spin"/> : <DownloadIcon />}
               {exporting ? "Exporting…" : "Export CSV"}
             </Button>
@@ -206,14 +267,14 @@ export function AttendanceHistoryContent() {
 
       {/* Records */}
       <Card className="graphite-surface gap-0 border-border/70">
-        {list.loading ? (<CardContent>
+        {loading ? (<CardContent>
             <TableSkeleton rows={6} cols={9}/>
           </CardContent>) : !rangeValid ? (<CardContent>
             <EmptyState title="Check the date range" description="The start date has to be on or before the end date."/>
-          </CardContent>) : list.error ? (<CardContent>
-            <ErrorState title="Unable to load attendance" message={list.error} onRetry={list.reload}/>
+          </CardContent>) : error ? (<CardContent>
+            <ErrorState title="Unable to load attendance" message={error} onRetry={searchActive ? searchList.reload : list.reload}/>
           </CardContent>) : items.length === 0 ? (<CardContent>
-            <EmptyState title="No attendance in this range" description="Try a wider date range, or check back after the first scan of the day." action={<Button size="sm" variant="outline" onClick={resetFilters}>
+            <EmptyState title={searchActive ? "No matching attendance" : "No attendance in this range"} description={searchActive ? "Try another student name or ID." : "Try a wider date range, or check back after the first scan of the day."} action={<Button size="sm" variant="outline" onClick={resetFilters}>
                   Reset filters
                 </Button>}/>
           </CardContent>) : (<>
@@ -288,13 +349,13 @@ export function AttendanceHistoryContent() {
                 {total === 1 ? "visit" : "visits"}
               </p>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" disabled={page <= 1 || list.loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+                <Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>
                   <ChevronLeftIcon /> Previous
                 </Button>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   Page {Math.min(page, totalPages)} of {totalPages}
                 </span>
-                <Button size="sm" variant="outline" disabled={page >= totalPages || list.loading} onClick={() => setPage((value) => value + 1)}>
+                <Button size="sm" variant="outline" disabled={page >= totalPages || loading} onClick={() => setPage((value) => value + 1)}>
                   Next <ChevronRightIcon />
                 </Button>
               </div>
@@ -306,7 +367,10 @@ export function AttendanceHistoryContent() {
             if (!open)
                 setEditing(null);
         }} onSaved={() => {
-            list.reload();
+            if (searchActive)
+                searchList.reload();
+            else
+                list.reload();
         }}/>
     </div>);
 }
