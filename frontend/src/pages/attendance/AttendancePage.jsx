@@ -54,7 +54,8 @@ const STATUS_META = {
     holiday: { label: "Holiday", short: "H", dot: "bg-sky-500", chip: "border-sky-500/40 bg-sky-500/15 text-sky-600 dark:text-sky-400", activeText: "text-sky-600 dark:text-sky-400", activeRing: "border-sky-500 bg-sky-500", hover: "hover:border-sky-500/40 hover:bg-sky-500/5 hover:text-sky-600 dark:hover:text-sky-400", tick: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400", tickDot: "bg-sky-500" },
 };
 const STATUS_ORDER = ["present", "absent", "leave", "holiday"];
-const MARK_PAGE_SIZE = 20;
+const ATTENDANCE_PAGE_SIZE = 20;
+const MARK_PAGE_SIZE = ATTENDANCE_PAGE_SIZE;
 const VIEW_ALL_STATUS_META = [
     { key: "present", label: "Present", color: "var(--chart-1)" },
     { key: "late", label: "Late", color: "var(--chart-2)" },
@@ -580,6 +581,7 @@ export function AttendancePage() {
     const [viewSlotId, setViewSlotId] = useState("all");
     const [viewDate, setViewDate] = useState(() => ymdOf(new Date()));
     const [search, setSearch] = useState("");
+    const [viewPage, setViewPage] = useState(1);
     const [editing, setEditing] = useState(null); // attendance record being corrected
 
     const dayRange = useMemo(() => {
@@ -588,7 +590,7 @@ export function AttendancePage() {
         return { from: start.toISOString(), to: new Date(start.getTime() + 86_399_999).toISOString() };
     }, [viewDate]);
 
-    const list = useAsync(() => data.listAttendance({ from: dayRange.from, to: dayRange.to, page: 1, pageSize: 100 }), [data, dayRange], {
+    const list = useAsync(() => listAllAttendance(data, dayRange), [data, dayRange], {
         enabled: activeTab === "view",
         pollingInterval: 60_000,
         skipPollingIfUnfocused: true,
@@ -596,6 +598,7 @@ export function AttendancePage() {
 
     /* --------- View All: attendance by day — one date chip, no filters ------- */
     const [viewAllDate, setViewAllDate] = useState(() => ymdOf(new Date()));
+    const [viewAllPage, setViewAllPage] = useState(1);
     const viewAllRange = useMemo(() => {
         const [y, m, d] = viewAllDate.split("-").map(Number);
         const start = new Date(y, m - 1, d);
@@ -648,6 +651,14 @@ export function AttendancePage() {
     const viewAllLoading = viewAllMembers.loading || viewAllList.loading;
     const viewAllError = viewAllMembers.error ?? viewAllList.error;
     const viewAllLabel = format(new Date(`${viewAllDate}T00:00:00`), "EEE, d MMM yyyy");
+    const viewAllTotalPages = Math.max(1, Math.ceil(viewAllRows.length / ATTENDANCE_PAGE_SIZE));
+    const visibleViewAllRows = viewAllRows.slice(
+        (viewAllPage - 1) * ATTENDANCE_PAGE_SIZE,
+        viewAllPage * ATTENDANCE_PAGE_SIZE,
+    );
+    useEffect(() => {
+        if (viewAllPage > viewAllTotalPages) setViewAllPage(viewAllTotalPages);
+    }, [viewAllPage, viewAllTotalPages]);
 
     // Class-attendance rows only (those carry an attendanceStatus).
     const classRows = useMemo(() => {
@@ -663,6 +674,14 @@ export function AttendancePage() {
             return true;
         });
     }, [classRows, viewSlotId, search]);
+    const viewTotalPages = Math.max(1, Math.ceil(filteredRows.length / ATTENDANCE_PAGE_SIZE));
+    const visibleViewRows = filteredRows.slice(
+        (viewPage - 1) * ATTENDANCE_PAGE_SIZE,
+        viewPage * ATTENDANCE_PAGE_SIZE,
+    );
+    useEffect(() => {
+        if (viewPage > viewTotalPages) setViewPage(viewTotalPages);
+    }, [viewPage, viewTotalPages]);
 
     /* Live refresh — students can scan the studio QR from the door and mark
        themselves present server-side. The Topbar broadcasts every newly
@@ -809,12 +828,14 @@ export function AttendancePage() {
             <span className="hidden sm:inline">Attendance History</span>
           </TabsTrigger>
         </TabsList>
- <div className="grid w-full grid-cols-4 gap-1.5 sm:gap-3 xl:w-auto">
-          <StatCard label="Total Students" value={summaryData?.totalStudents ?? 0} icon={<UsersIcon className="size-4"/>} tone="neutral"/>
-          <StatCard label="Present Today" value={summaryData?.presentToday ?? 0} icon={<CheckCircle2Icon className="size-4"/>} tone="present"/>
-          <StatCard label="Absent Today" value={summaryData?.absentToday ?? 0} icon={<XCircleIcon className="size-4"/>} tone="absent"/>
-          <StatCard label="Attendance Rate" value={`${summaryData?.attendanceRate ?? 0}%`} icon={<GaugeIcon className="size-4"/>} tone="rate"/>
-        </div>
+        {activeTab !== "all" ? (
+          <div className="grid w-full grid-cols-4 gap-1.5 sm:gap-3 xl:w-auto">
+            <StatCard label="Total Students" value={summaryData?.totalStudents ?? 0} icon={<UsersIcon className="size-4"/>} tone="neutral"/>
+            <StatCard label="Present Today" value={summaryData?.presentToday ?? 0} icon={<CheckCircle2Icon className="size-4"/>} tone="present"/>
+            <StatCard label="Absent Today" value={summaryData?.absentToday ?? 0} icon={<XCircleIcon className="size-4"/>} tone="absent"/>
+            <StatCard label="Attendance Rate" value={`${summaryData?.attendanceRate ?? 0}%`} icon={<GaugeIcon className="size-4"/>} tone="rate"/>
+          </div>
+        ) : null}
         <TabsContent value="mark">
         {/* Mobile: roster filters sit right under the tab bar, outside the
             card — the roster below is its own card (mobile-first spec). */}
@@ -1094,7 +1115,10 @@ export function AttendancePage() {
                   aria-label="Class Slot"
                   className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 sm:w-auto sm:max-w-56"
                   value={viewSlotId}
-                  onChange={(e) => setViewSlotId(e.target.value)}
+                  onChange={(e) => {
+                    setViewSlotId(e.target.value);
+                    setViewPage(1);
+                  }}
                 >
                   <option value="all">Slot: All Classes</option>
                   {SLOT_GROUPS.map((group) => {
@@ -1115,10 +1139,16 @@ export function AttendancePage() {
                     </optgroup>);
                   })}
                 </select>
-                <Input aria-label="Date" type="date" value={viewDate} onChange={(e) => setViewDate(e.target.value)} className="h-8 w-full text-xs sm:w-36"/>
+                <Input aria-label="Date" type="date" value={viewDate} onChange={(e) => {
+                    setViewDate(e.target.value);
+                    setViewPage(1);
+                }} className="h-8 w-full text-xs sm:w-36"/>
                 <div className="relative w-full sm:w-40">
                   <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/>
-                  <Input aria-label="Search student" placeholder="Search student" className="h-8 w-full pl-7 text-xs" value={search} onChange={(e) => setSearch(e.target.value)}/>
+                  <Input aria-label="Search student" placeholder="Search student" className="h-8 w-full pl-7 text-xs" value={search} onChange={(e) => {
+                      setSearch(e.target.value);
+                      setViewPage(1);
+                  }}/>
                 </div>
                 <Button size="sm" variant="outline" className="ml-auto h-8 gap-1 px-2.5 text-xs" onClick={handleExport} disabled={list.loading}>
                   {list.loading ? <Loader2Icon className="size-3.5 animate-spin"/> : <DownloadIcon className="size-3.5"/>}
@@ -1144,8 +1174,8 @@ export function AttendancePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRows.map((row, index) => (<TableRow key={row.id}>
-                        <TableCell className="text-sm text-muted-foreground tabular-nums">{index + 1}</TableCell>
+                    {visibleViewRows.map((row, index) => (<TableRow key={row.id}>
+                        <TableCell className="text-sm text-muted-foreground tabular-nums">{(viewPage - 1) * ATTENDANCE_PAGE_SIZE + index + 1}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <SmartImage src={row.memberPhoto} name={row.memberName ?? "Student"} className="size-8 shrink-0"/>
@@ -1180,6 +1210,20 @@ export function AttendancePage() {
                   </TableBody>
                 </Table>
               </div>)}
+            {!list.loading && filteredRows.length > 0 ? (<div className="flex flex-col gap-3 border-t border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+                <p className="text-xs text-muted-foreground">
+                  Showing {(viewPage - 1) * ATTENDANCE_PAGE_SIZE + 1}–{Math.min(viewPage * ATTENDANCE_PAGE_SIZE, filteredRows.length)} of {filteredRows.length} records
+                </p>
+                <div className="flex items-center justify-between gap-2 sm:justify-end">
+                  <Button size="sm" variant="outline" aria-label="Previous attendance page" disabled={viewPage <= 1} onClick={() => setViewPage((page) => Math.max(1, page - 1))}>
+                    <ChevronLeftIcon/> Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground tabular-nums">Page {viewPage} of {viewTotalPages}</span>
+                  <Button size="sm" variant="outline" aria-label="Next attendance page" disabled={viewPage >= viewTotalPages} onClick={() => setViewPage((page) => Math.min(viewTotalPages, page + 1))}>
+                    Next <ChevronRightIcon/>
+                  </Button>
+                </div>
+              </div>) : null}
           </div>
         </CardContent>
       </Card>
@@ -1212,7 +1256,12 @@ export function AttendancePage() {
                     type="date"
                     aria-label="Attendance date"
                     value={viewAllDate}
-                    onChange={(e) => { if (e.target.value) setViewAllDate(e.target.value); }}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setViewAllDate(e.target.value);
+                        setViewAllPage(1);
+                      }
+                    }}
                     onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* older browsers: focus the date field */ } }}
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                   />
@@ -1318,7 +1367,7 @@ export function AttendancePage() {
                   </CardHeader>
                   <CardContent className="p-3 sm:p-4">
                     <ul className="space-y-2 sm:space-y-0 sm:divide-y sm:divide-border/60">
-                      {viewAllRows.map((row) => (<li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:rounded-none sm:border-0 sm:px-2 sm:py-3 sm:shadow-none">
+                      {visibleViewAllRows.map((row) => (<li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:rounded-none sm:border-0 sm:px-2 sm:py-3 sm:shadow-none">
                         <div className="flex min-w-0 items-center gap-3">
                           <SmartImage src={row.memberPhoto} name={row.memberName ?? "Student"} className="size-9 shrink-0"/>
                           <div className="min-w-0">
@@ -1332,6 +1381,20 @@ export function AttendancePage() {
                         <StatusChip status={row.attendanceStatus}/>
                       </li>))}
                     </ul>
+                    <div className="mt-3 flex flex-col gap-3 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        Showing {(viewAllPage - 1) * ATTENDANCE_PAGE_SIZE + 1}–{Math.min(viewAllPage * ATTENDANCE_PAGE_SIZE, viewAllRows.length)} of {viewAllRows.length} students
+                      </p>
+                      <div className="flex items-center justify-between gap-2 sm:justify-end">
+                        <Button size="sm" variant="outline" aria-label="Previous View All page" disabled={viewAllPage <= 1} onClick={() => setViewAllPage((page) => Math.max(1, page - 1))}>
+                          <ChevronLeftIcon/> Previous
+                        </Button>
+                        <span className="text-xs text-muted-foreground tabular-nums">Page {viewAllPage} of {viewAllTotalPages}</span>
+                        <Button size="sm" variant="outline" aria-label="Next View All page" disabled={viewAllPage >= viewAllTotalPages} onClick={() => setViewAllPage((page) => Math.min(viewAllTotalPages, page + 1))}>
+                          Next <ChevronRightIcon/>
+                        </Button>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </>

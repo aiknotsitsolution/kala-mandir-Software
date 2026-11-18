@@ -1,5 +1,5 @@
 import { Provider } from "react-redux";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -81,7 +81,9 @@ describe("AttendancePage tabs and data loading", () => {
         expect(viewAllTab).toHaveAttribute("aria-selected", "true");
         expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
         expect(screen.getByText("Riya Shah")).toBeInTheDocument();
-        expect(screen.getByText("Not marked")).toBeInTheDocument();
+        expect(screen.getAllByText("Not marked")).toHaveLength(2);
+        expect(screen.getByText("Active Students")).toBeInTheDocument();
+        expect(screen.queryByText("Total Students")).not.toBeInTheDocument();
         expect(screen.queryByText("Inactive Student")).not.toBeInTheDocument();
         expect(mockData.listAttendance).toHaveBeenCalledTimes(1);
         expect(mockData.listAllMembers).toHaveBeenCalledTimes(1);
@@ -148,6 +150,57 @@ describe("AttendancePage tabs and data loading", () => {
         expect(await screen.findByText("Student 1")).toBeInTheDocument();
         expect(screen.queryByText("Student 21")).not.toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Next students" }));
+
+        expect(screen.getByText("Student 21")).toBeInTheDocument();
+        expect(screen.queryByText("Student 1")).not.toBeInTheDocument();
+    });
+
+    it("paginates the View All student register", async () => {
+        const user = userEvent.setup();
+        mockData.listAllMembers = vi.fn(async () => Array.from({ length: 25 }, (_, index) => ({
+            id: `m${index + 1}`,
+            fullName: `Student ${String(index + 1).padStart(2, "0")}`,
+            memberCode: `KM-${String(index + 1).padStart(3, "0")}`,
+            status: "active",
+        })));
+        mockData.listAttendance = vi.fn(async ({ page, pageSize }) => ({
+            items: [],
+            total: 0,
+            page,
+            pageSize,
+        }));
+        renderPage();
+
+        expect(await screen.findByText("Student 01")).toBeInTheDocument();
+        expect(screen.getByText("Showing 1–20 of 25 students")).toBeInTheDocument();
+        const studentRegister = within(screen.getByText("Student register").closest('[data-slot="card"]'));
+        expect(studentRegister.queryByText("Student 21")).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Next View All page" }));
+
+        expect(studentRegister.getByText("Student 21")).toBeInTheDocument();
+        expect(studentRegister.queryByText("Student 01")).not.toBeInTheDocument();
+    });
+
+    it("paginates the View Attendance register", async () => {
+        const user = userEvent.setup();
+        const records = Array.from({ length: 25 }, (_, index) => ({
+            id: `a${index + 1}`,
+            memberId: `m${index + 1}`,
+            memberName: `Student ${index + 1}`,
+            memberCode: `KM-${String(index + 1).padStart(3, "0")}`,
+            attendanceStatus: "present",
+        }));
+        mockData.listAttendance = vi.fn(async ({ page, pageSize }) => ({
+            items: records.slice((page - 1) * pageSize, page * pageSize),
+            total: records.length,
+            page,
+            pageSize,
+        }));
+        renderPage("/attendance?tab=view");
+
+        expect(await screen.findByText("Student 1")).toBeInTheDocument();
+        expect(screen.queryByText("Student 21")).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Next attendance page" }));
 
         expect(screen.getByText("Student 21")).toBeInTheDocument();
         expect(screen.queryByText("Student 1")).not.toBeInTheDocument();
