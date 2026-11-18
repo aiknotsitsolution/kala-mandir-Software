@@ -76,7 +76,7 @@ export function SlotFormDialog({ open, onOpenChange, slot, onSave }) {
         run(async () => {
             try {
                 await onSave({
-                    name: `${format12h(selected.start)} – ${format12h(selected.end)}`,
+                    name: `${values.classTag} · ${format12h(selected.start)} – ${format12h(selected.end)}`,
                     description: null,
                     classTag: values.classTag,
                     weekdays: [...values.weekdays].sort(),

@@ -37,7 +37,7 @@ export const memberFormSchema = z
         .max(254)
         .optional()
         .or(z.literal("")),
-    phone: phoneSchema,
+    phone: z.string().regex(/^\d{10}$/, "Enter a 10-digit mobile number"),
     dateOfBirth: z.union([dateOnlySchema, z.literal("")]).optional(),
     /** Age in years (collected at registration; DOB still supported). */
     age: z
@@ -50,7 +50,11 @@ export const memberFormSchema = z
     gender: z.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
     address: z.string().trim().max(400).optional(),
     emergencyContactName: z.string().trim().max(120).optional(),
-    emergencyContactPhone: z.union([phoneSchema, z.literal("")]).optional(),
+    emergencyContactPhone: z
+        .string()
+        .regex(/^\d{10}$/, "Enter a 10-digit emergency contact number")
+        .optional()
+        .or(z.literal("")),
     joinDate: dateOnlySchema,
     planId: z.string().min(1, "Choose a membership plan"),
     membershipStart: dateOnlySchema,
@@ -80,24 +84,18 @@ export const memberFormSchema = z
     ])
         .optional()
         .transform((v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null)),
-    // Multi-slot picker: array of "HH:mm-HH:mm" from gym slots. The FIRST
-    // entry is the preferred/primary slot (""); empty array = no preference.
-    preferredSlot: z
-        .array(
-        z.string().regex(/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/, "Pick a valid time slot"),
-    )
+    // Selected recurring class slots; the backend verifies their class tag.
+    classSlotIds: z
+        .array(z.string().trim().min(1, "Choose a valid class slot"))
+        .max(20, "Select at most 20 class slots")
         .optional()
         .transform((v) => (Array.isArray(v) ? v : [])),
-    // Class stream the student belongs to — required when creating a new
-    // student; optional on edit so existing records can be saved without
-    // forcing a tag pick (see superRefine below).
-    classTag: z
-        .union([
-        z.enum(CLASS_TAGS, { errorMap: () => ({ message: "Choose a class tag (Art or Dance)" }) }),
-        z.literal(""),
-    ])
+    // A student may attend either or both class streams.
+    classTags: z
+        .array(z.enum(CLASS_TAGS))
+        .max(CLASS_TAGS.length, "Choose valid class tags")
         .optional()
-        .transform((v) => (v === "" ? "" : v)),
+        .transform((v) => [...new Set(v ?? [])]),
     // Assigned trainer (StaffProfile id) — "" = none; "" → null before the API.
     trainerId: z
         .union([z.string().trim().min(1), z.literal("")])
@@ -117,12 +115,12 @@ export const memberFormSchema = z
             message: "Set a portal password for the student",
         });
     }
-    // New students must be tagged Art or Dance; edits may leave it unset.
-    if (data.mode !== "edit" && !data.classTag) {
+    // New students must select at least one class stream.
+    if (data.mode !== "edit" && data.classTags.length === 0) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            path: ["classTag"],
-            message: "Choose a class tag (Art or Dance)",
+            path: ["classTags"],
+            message: "Choose at least one class tag",
         });
     }
 });

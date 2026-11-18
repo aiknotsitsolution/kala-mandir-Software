@@ -26,6 +26,17 @@ const GENDER_OPTIONS = [
     { value: "prefer_not_to_say", label: "Prefer not to say" },
 ];
 const PAYMENT_METHODS = ["cash", "upi", "card", "bank_transfer", "other"];
+function ClassSlotButton({ slot, active, onClick, children }) {
+    return (<button type="button" aria-pressed={active} onClick={onClick} className={`rounded-lg border px-3 py-1.5 text-left text-xs font-medium transition-colors ${active
+        ? "border-primary bg-primary/10 text-primary"
+        : "border-border/60 bg-background text-muted-foreground hover:bg-accent"}`}>
+      <span className="flex flex-col">
+        <span className="font-semibold">{children}</span>
+        <span>{slot.name.startsWith(`${slot.classTag} · `) ? slot.name.slice(slot.classTag.length + 3) : slot.name}</span>
+        <span className="text-[10px] opacity-75">{timeSlotLabel({ start: slot.startTime, end: slot.endTime })}</span>
+      </span>
+    </button>);
+}
 function emptyValues() {
     const today = toDateOnly(new Date());
     return {
@@ -41,8 +52,7 @@ function emptyValues() {
         joinDate: today,
         planId: "",
         membershipStart: today,
-        // Class stream (Art / Dance) — required; "" forces an explicit pick.
-        classTag: "",
+        classTags: [],
         loginPassword: "",
         // Hidden flag: "create" requires a login password, "edit" does not.
         mode: "create",
@@ -50,8 +60,7 @@ function emptyValues() {
         notes: "",
         // NaN renders an empty number input and validates as "not set".
         plannedHoursPerDay: Number.NaN,
-        // [] = no slots picked (multi-select; first entry = preferred slot).
-        preferredSlot: [],
+        classSlotIds: [],
         // "" = no trainer assigned (zod → null before hitting the API).
         trainerId: "",
     };
@@ -59,6 +68,17 @@ function emptyValues() {
 function trimOrNull(value) {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
+}
+function indianPhoneDigits(value) {
+    let digits = String(value ?? "").replace(/\D/g, "");
+    if (digits.startsWith("0091") && digits.length > 10) {
+        digits = digits.slice(4);
+    } else if (digits.startsWith("91") && digits.length > 10) {
+        digits = digits.slice(2);
+    } else if (digits.startsWith("0") && digits.length === 11) {
+        digits = digits.slice(1);
+    }
+    return digits.slice(0, 10);
 }
 /** "2014-05-12" → 12 (whole years as of today); null when empty/junk/future. */
 function ageFrom(dob) {
@@ -81,7 +101,7 @@ function toIdentityInput(values) {
     return {
         fullName: values.fullName,
         email: trimOrNull(values.email),
-        phone: values.phone,
+        phone: `+91${values.phone}`,
         photoUrl: trimOrNull(values.photoUrl),
         dateOfBirth: values.dateOfBirth ? values.dateOfBirth : null,
         // Age is derived from the date of birth (never typed by hand). Falls
@@ -96,13 +116,9 @@ function toIdentityInput(values) {
         plannedHoursPerDay: typeof values.plannedHoursPerDay === "number" && values.plannedHoursPerDay > 0
             ? values.plannedHoursPerDay
             : null,
-        // Multi-slot picker — [0] = preferred/primary; every selected range
-        // is persisted as a recurring batch enrollment on create and edit.
-        slotRanges: Array.isArray(values.preferredSlot) ? values.preferredSlot : [],
-        preferredSlot: (Array.isArray(values.preferredSlot) ? values.preferredSlot[0] : values.preferredSlot) ?? null,
-        // On edit, omit classTag when empty so the existing value isn't clobbered.
-        classTag: values.mode === "edit" ? (values.classTag || undefined) : values.classTag,
-        emergencyContactPhone: values.emergencyContactPhone ? values.emergencyContactPhone : null,
+        slotIds: Array.isArray(values.classSlotIds) ? values.classSlotIds : [],
+        classTags: values.classTags,
+        emergencyContactPhone: values.emergencyContactPhone || null,
         joinDate: values.joinDate,
         notes: trimOrNull(values.notes),
         // Assigned trainer — "" / blank → null (unassigned).
@@ -117,9 +133,7 @@ function toCreateInput(values, method, recordPayment) {
     const identity = toIdentityInput(values);
     return {
         ...identity,
-        // Multi-slot signup — every picked range becomes a batch enrollment
-        // on the backend; preferredSlot ([0]) stays the primary row.
-        slotRanges: identity.slotRanges,
+        // Every selected class slot becomes its own recurring enrollment.
         planId: values.planId,
         membershipStart: values.membershipStart,
         loginPassword: trimOrNull(values.loginPassword) ?? undefined,
@@ -141,7 +155,7 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
     const [recordPayment, setRecordPayment] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState("cash");
     const [showPassword, setShowPassword] = useState(false);
-    const { register, handleSubmit, control, reset, watch, setValue, formState: { errors }, } = useForm({
+    const { register, handleSubmit, control, reset, watch, setValue, formState: { errors, dirtyFields }, } = useForm({
         resolver: zodResolver(memberFormSchema),
         defaultValues: emptyValues(),
     });
@@ -160,9 +174,17 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
         [planChoices, watchedPlanId],
     );
     const data = useData();
-    /** Gym slot schedule — drives the preferred-slot picker (hidden when empty). */
-    const gym = useAsync(() => data.getGymFresh(), [data]);
-    const slots = useMemo(() => (gym.data?.timeSlots ?? []).filter((slot) => slot.start && slot.end), [gym.data]);
+    /** Class slots are tagged and enrolled by ID so streams never share a time-only match. */
+    const classSlots = useAsync(() => data.listClassSlots(), [data], { enabled: open });
+    const watchedClassTagValue = watch("classTags");
+    const watchedClassTags = useMemo(
+        () => Array.isArray(watchedClassTagValue) ? watchedClassTagValue : [],
+        [watchedClassTagValue],
+    );
+    const slots = useMemo(
+        () => (classSlots.data ?? []).filter((slot) => slot.isActive && watchedClassTags.includes(slot.classTag)),
+        [classSlots.data, watchedClassTags],
+    );
     /** Active staff — drives the "Assigned trainer" picker. */
     const staffList = useAsync(() => data.listStaff(false), [data]);
     const trainerChoices = useMemo(
@@ -183,23 +205,19 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
             ...emptyValues(),
             fullName: member.fullName,
             email: member.email ?? "",
-            phone: member.phone,
+            phone: indianPhoneDigits(member.phone),
             dateOfBirth: member.dateOfBirth ? toDateOnly(member.dateOfBirth) : "",
             gender: member.gender ?? undefined,
             address: member.address ?? "",
             emergencyContactName: member.emergencyContactName ?? "",
-            emergencyContactPhone: member.emergencyContactPhone ?? "",
+            emergencyContactPhone: indianPhoneDigits(member.emergencyContactPhone),
             joinDate: toDateOnly(member.joinDate),
             photoUrl: member.photoUrl ?? "",
             notes: member.notes ?? "",
             plannedHoursPerDay: member.plannedHoursPerDay ?? Number.NaN,
-            // Multi-slot picker reflects all active batch enrollments; older
-            // records fall back to their preferred slot.
-            preferredSlot: member.slotRanges?.length
-                ? member.slotRanges
-                : member.preferredSlot ? [member.preferredSlot] : [],
+            classSlotIds: member.slotIds ?? [],
             trainerId: member.trainerId ?? "",
-            classTag: member.classTag ?? "",
+            classTags: member.classTags?.length ? member.classTags : member.classTag ? [member.classTag] : [],
             age: typeof member.age === "number" && member.age > 0 ? member.age : Number.NaN,
             // Hidden in edit mode; the schema only requires it on create.
             mode: "edit",
@@ -213,9 +231,16 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
     const submit = handleSubmit((values) => {
         void run(async () => {
             try {
+                const input = member
+                    ? toUpdateInput(values)
+                    : toCreateInput(values, paymentMethod, recordPayment);
+                if (member) {
+                    if (!dirtyFields.classTags) delete input.classTags;
+                    if (!dirtyFields.classSlotIds && !dirtyFields.classTags) delete input.slotIds;
+                }
                 const saved = await onSave(member
-                    ? { mode: "update", input: toUpdateInput(values) }
-                    : { mode: "create", input: toCreateInput(values, paymentMethod, recordPayment) });
+                    ? { mode: "update", input }
+                    : { mode: "create", input });
                 if (saved)
                     onOpenChange(false);
             }
@@ -262,7 +287,22 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
 
             <div className="space-y-2">
               <Label htmlFor="member-phone">Phone</Label>
-              <Input id="member-phone" placeholder="+91 98765 43210" {...register("phone")}/>
+              <div className="flex">
+                <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">+91</span>
+                <Controller control={control} name="phone" render={({ field }) => (<Input
+                  {...field}
+                  id="member-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  placeholder="10-digit mobile number"
+                  className="rounded-l-none"
+                  value={field.value ?? ""}
+                  onChange={(event) => field.onChange(indianPhoneDigits(event.target.value))}
+                />)}/>
+              </div>
               {errors.phone ? <p className="text-xs text-destructive">{errors.phone.message}</p> : null}
             </div>
 
@@ -299,88 +339,82 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
               {errors.joinDate ? (<p className="text-xs text-destructive">{errors.joinDate.message}</p>) : null}
             </div>
 
-            {/* Class stream — Art or Dance; required on both add & edit. */}
+            {/* Students may be enrolled in one or both class streams. */}
             <div className="space-y-2 sm:col-span-2">
-              <Label>Class tag</Label>
-              <Controller control={control} name="classTag" render={({ field }) => (<div className="flex gap-2">
+              <Label>Class tags</Label>
+              <Controller control={control} name="classTags" render={({ field }) => (<div className="flex gap-2">
                   {CLASS_TAGS.map((tag) => {
-                    const active = field.value === tag;
-                    return (<button key={tag} type="button" onClick={() => field.onChange(tag)} aria-pressed={active} className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${active
+                    const selected = Array.isArray(field.value) ? field.value : [];
+                    const active = selected.includes(tag);
+                    return (<button key={tag} type="button" disabled={classSlots.loading || Boolean(classSlots.error) || (active && selected.length === 1)} onClick={() => {
+                        const nextTags = active ? selected.filter((item) => item !== tag) : [...selected, tag];
+                        field.onChange(nextTags);
+                        const currentSlotIds = watch("classSlotIds") ?? [];
+                        const remainingSlotIds = new Set((classSlots.data ?? [])
+                            .filter((slot) => nextTags.includes(slot.classTag))
+                            .map((slot) => slot.id));
+                        setValue("classSlotIds", currentSlotIds.filter((id) => remainingSlotIds.has(id)), { shouldDirty: true });
+                    }} aria-pressed={active} className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${active
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border/60 bg-background text-muted-foreground hover:bg-accent"}`}>
                         {tag}
                       </button>);
                   })}
                 </div>)}/>
-              {errors.classTag ? (<p className="text-xs text-destructive">{errors.classTag.message}</p>) : null}
+              {errors.classTags ? (<p className="text-xs text-destructive">{errors.classTags.message}</p>) : null}
             </div>
 
-            {/* Preferred slot — the batch the student chose at joining (gym slots from Manage Institute). */}
+            {/* Class slots are scoped to the selected Art/Dance stream. */}
             <div className="space-y-2 sm:col-span-2">
               <div className="flex items-center justify-between">
-                <Label>Time slots (student's batches)</Label>
-                <Button type="button" size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => navigate("/manage-gym")}>
-                  <PlusIcon className="size-3.5"/> Add More Slots
+                <Label>Class slots (student's batches)</Label>
+                <Button type="button" size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => navigate("/classes")}>
+                  <PlusIcon className="size-3.5"/> Manage class slots
                 </Button>
               </div>
-              {slots.length > 0 ? (<Controller control={control} name="preferredSlot" render={({ field }) => (<div className="space-y-3">
+              {classSlots.loading ? (<p className="text-[11px] text-muted-foreground">Loading class slots…</p>) : classSlots.error ? (<div className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+                  <span>Unable to load class slots: {classSlots.error}</span>
+                  <Button type="button" size="xs" variant="outline" onClick={classSlots.reload}>Retry</Button>
+                </div>) : watchedClassTags.length === 0 ? (<p className="text-[11px] text-muted-foreground">Choose one or both class tags to see their class slots.</p>) : slots.length > 0 ? (<Controller control={control} name="classSlotIds" render={({ field }) => (<div className="space-y-3">
                   {SLOT_GROUPS.map((group) => {
-                    const groupSlots = slots.filter((slot) => slotGroupOf(slot.start) === group.key);
+                    const groupSlots = slots.filter((slot) => slotGroupOf(slot.startTime) === group.key);
                     if (groupSlots.length === 0) return null;
                     return (<div key={group.key}>
                       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
                       <div className="flex flex-wrap gap-2">
                         {groupSlots.map((slot) => {
-                          const key = `${slot.start}-${slot.end}`;
-                          const active = Array.isArray(field.value) && field.value.includes(key);
-                          return (<button key={key} type="button" onClick={() => {
-                            // Multi-select toggle — pick order matters: the
-                            // FIRST chosen slot is the preferred/primary one.
+                          const active = Array.isArray(field.value) && field.value.includes(slot.id);
+                          return (<ClassSlotButton key={slot.id} slot={slot} active={active} onClick={() => {
                             const list = Array.isArray(field.value) ? field.value : [];
-                            field.onChange(active ? list.filter((k) => k !== key) : [...list, key]);
-                          }} className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${active
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border/60 bg-background text-muted-foreground hover:bg-accent"}`}>
-                              {timeSlotLabel(slot)}
-                            </button>);
+                            field.onChange(active ? list.filter((id) => id !== slot.id) : [...list, slot.id]);
+                          }}>{slot.classTag}</ClassSlotButton>);
                         })}
                       </div>
                     </div>);
                   })}
-                  {slots.some((slot) => !slotGroupOf(slot.start)) ? (<div>
+                  {slots.some((slot) => !slotGroupOf(slot.startTime)) ? (<div>
                       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Other</p>
                       <div className="flex flex-wrap gap-2">
-                        {slots.filter((slot) => !slotGroupOf(slot.start)).map((slot) => {
-                          const key = `${slot.start}-${slot.end}`;
-                          const active = Array.isArray(field.value) && field.value.includes(key);
-                          return (<button key={key} type="button" onClick={() => {
-                            // Multi-select toggle — pick order matters: the
-                            // FIRST chosen slot is the preferred/primary one.
+                        {slots.filter((slot) => !slotGroupOf(slot.startTime)).map((slot) => {
+                          const active = Array.isArray(field.value) && field.value.includes(slot.id);
+                          return (<ClassSlotButton key={slot.id} slot={slot} active={active} onClick={() => {
                             const list = Array.isArray(field.value) ? field.value : [];
-                            field.onChange(active ? list.filter((k) => k !== key) : [...list, key]);
-                          }} className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${active
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border/60 bg-background text-muted-foreground hover:bg-accent"}`}>
-                              {timeSlotLabel(slot)}
-                            </button>);
+                            field.onChange(active ? list.filter((id) => id !== slot.id) : [...list, slot.id]);
+                          }}>{slot.classTag}</ClassSlotButton>);
                         })}
                       </div>
                     </div>) : null}
                   {(() => {
                     const picked = Array.isArray(field.value) ? field.value : [];
                     if (picked.length === 0) return null;
-                    const format = (key) => {
-                      const slot = slots.find((s) => `${s.start}-${s.end}` === key);
-                      return slot ? timeSlotLabel(slot) : key;
-                    };
+                    const first = slots.find((slot) => slot.id === picked[0]);
                     return (<p className="text-[11px] text-muted-foreground">
-                      {picked.length} slot{picked.length === 1 ? "" : "s"} selected — each gets its own batch
-                      enrollment. <span className="font-medium text-foreground">{format(picked[0])}</span> is the
-                      preferred (primary) slot.
+                      {picked.length} slot{picked.length === 1 ? "" : "s"} selected across {watchedClassTags.join(" and ")}.
+                      {first ? <> <span className="font-medium text-foreground">{first.name}</span> is the preferred slot.</> : null}
                     </p>);
                   })()}
-                </div>)} />) : (<p className="text-[11px] text-muted-foreground">No time slots configured yet — add them from Manage Institute.</p>)}
-              {errors.preferredSlot ? (<p className="text-xs text-destructive">{errors.preferredSlot.message}</p>) : null}
+                </div>)} />) : (<p className="text-[11px] text-muted-foreground">No active slots found for {watchedClassTags.join(" or ")}. Create slots from Classes → Class slots.</p>)}
+              {errors.classSlotIds ? (<p className="text-xs text-destructive">{errors.classSlotIds.message}</p>) : null}
             </div>
 
             {/* Assigned trainer — the staff member responsible for this student. */}
@@ -409,7 +443,22 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
 
             <div className="space-y-2">
               <Label htmlFor="member-emergency-phone">Emergency contact phone</Label>
-              <Input id="member-emergency-phone" placeholder="+91 98765 43210" {...register("emergencyContactPhone")}/>
+              <div className="flex">
+                <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">+91</span>
+                <Controller control={control} name="emergencyContactPhone" render={({ field }) => (<Input
+                  {...field}
+                  id="member-emergency-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  placeholder="10-digit mobile number"
+                  className="rounded-l-none"
+                  value={field.value ?? ""}
+                  onChange={(event) => field.onChange(indianPhoneDigits(event.target.value))}
+                />)}/>
+              </div>
               {errors.emergencyContactPhone ? (<p className="text-xs text-destructive">{errors.emergencyContactPhone.message}</p>) : null}
             </div>
 
@@ -460,7 +509,17 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
 
                 <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
                   <label htmlFor="member-record-payment" className="flex cursor-pointer items-center gap-2 text-sm">
-                    <Checkbox id="member-record-payment" checked={recordPayment} onCheckedChange={(checked) => setRecordPayment(checked === true)}/>
+                    <Checkbox
+                      id="member-record-payment"
+                      checked={recordPayment}
+                      onCheckedChange={(checked) => {
+                        const enabled = checked === true;
+                        setRecordPayment(enabled);
+                        if (enabled) {
+                          toast.info("Initial payment enabled. Enter an amount to record it with this membership.");
+                        }
+                      }}
+                    />
                     Record a payment with this membership
                   </label>
 

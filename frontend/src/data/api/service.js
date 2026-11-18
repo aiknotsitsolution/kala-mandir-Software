@@ -196,6 +196,7 @@ export class ApiDataService {
             search: query.search,
             status: query.status && query.status !== "all" ? query.status : undefined,
             planId: query.planId,
+            classTag: query.classTag && query.classTag !== "all" ? query.classTag : undefined,
             sort: query.sort,
             dir: query.dir,
             page: query.page,

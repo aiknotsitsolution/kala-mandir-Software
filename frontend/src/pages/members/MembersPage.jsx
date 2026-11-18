@@ -74,6 +74,7 @@ export function MembersPage() {
         return preset && STATUS_FILTERS.includes(preset) ? preset : "all";
     });
     const [planId, setPlanId] = useState("all");
+    const [classTag, setClassTag] = useState("all");
     const [page, setPage] = useState(1);
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -89,13 +90,14 @@ export function MembersPage() {
         search: debouncedSearch.trim() || undefined,
         status,
         planId: planId === "all" ? undefined : planId,
+        classTag,
         page,
         pageSize: PAGE_SIZE,
-    }), [data, debouncedSearch, status, planId, page]);
+    }), [data, debouncedSearch, status, planId, classTag, page]);
     // Reset to the first page whenever the filters change.
     useEffect(() => {
         setPage(1);
-    }, [debouncedSearch, status, planId]);
+    }, [debouncedSearch, status, planId, classTag]);
     // Deep link: /members?new=1 auto-opens the add dialog (dashboard quick action).
     // The param is kept while the dialog should be open so a page-transition remount
     // re-opens it; it is cleared only once the dialog is dismissed (or not permitted).
@@ -118,11 +120,12 @@ export function MembersPage() {
             setSearchParams({}, { replace: true });
         }
     };
-    const hasFilters = debouncedSearch.trim() !== "" || status !== "all" || planId !== "all";
+    const hasFilters = debouncedSearch.trim() !== "" || status !== "all" || planId !== "all" || classTag !== "all";
     const clearFilters = () => {
         setSearch("");
         setStatus("all");
         setPlanId("all");
+        setClassTag("all");
     };
     const openCreate = () => {
         setEditing(null);
@@ -228,6 +231,18 @@ export function MembersPage() {
             </SelectContent>
           </Select>
 
+          <Select value={classTag} onValueChange={setClassTag}>
+            <SelectTrigger size="sm" className="w-full border-km-gold/25 bg-background/60 sm:w-auto" aria-label="Filter by class tag">
+              <SelectValue placeholder="All class tags"/>
+            </SelectTrigger>
+            <SelectContent position="popper" align="end" className="min-w-40">
+              <SelectItem value="all">All class tags</SelectItem>
+              <SelectItem value="Dance">Dance</SelectItem>
+              <SelectItem value="Art">Arts</SelectItem>
+              <SelectItem value="both">Both</SelectItem>
+            </SelectContent>
+          </Select>
+
           {canCreate ? (<Button size="sm" className="ml-auto" onClick={openCreate}>
               <PlusIcon className="size-4"/> Add student
             </Button>) : null}
@@ -258,7 +273,7 @@ export function MembersPage() {
                       <TableHead className="w-[16%] px-2 align-middle text-xs md:px-3 md:w-[10%] md:text-sm">Classes</TableHead>
                       <TableHead className="w-[22%] px-2 align-middle text-xs md:px-3 md:w-[11%] md:text-sm">
                         <span className="md:hidden" title="Remaining classes">Left</span>
-                        <span className="hidden md:inline">Remaining Classes</span>
+                        <span className="hidden md:inline">Remaining</span>
                       </TableHead>
                       <TableHead className="hidden w-[12%] px-3 align-middle text-sm sm:table-cell">Plan</TableHead>
                       <TableHead className="hidden w-[10%] px-3 align-middle lg:table-cell">Trainer</TableHead>
@@ -283,14 +298,14 @@ export function MembersPage() {
                                 {/* Mobile-only: the Status column is hidden below sm,
                                     so the status rides along beside the ID. */}
                                 <span className="sm:hidden">
-                                  <StatusBadge status={member.effectiveStatus} className="px-1 py-0 text-[9px] leading-none"/>
+                                  <StatusBadge status={member.membership?.status ?? member.effectiveStatus} className="px-1 py-0 text-[9px] leading-none"/>
                                 </span>
                               </span>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="hidden px-2 align-middle sm:table-cell sm:px-3">
-                          <StatusBadge status={member.effectiveStatus}/>
+                          <StatusBadge status={member.membership?.status ?? member.effectiveStatus}/>
                         </TableCell>
                         <TableCell className="px-2 align-middle sm:px-3">
                           <ClassesCell member={member}/>

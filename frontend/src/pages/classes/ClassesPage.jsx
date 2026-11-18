@@ -137,7 +137,7 @@ export function ClassesPage() {
     const [cancelling, setCancelling] = useState(null);
 
     /* Schedule / Class Slots tabs — only one section is mounted at a time. */
-    const [activeTab, setActiveTab] = useState("schedule");
+    const [activeTab, setActiveTab] = useState("slots");
 
     /* ------------------------------ range ------------------------------- */
     const range = useMemo(() => {
@@ -282,7 +282,6 @@ export function ClassesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5">
         {/* Section tabs — both sections live on this page */}
         <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1" role="group" aria-label="Page sections">
-          {tabButton("schedule", "Schedule", CalendarDaysIcon)}
           {tabButton("slots", "Class Slots", CalendarRangeIcon)}
         </div>
 
@@ -321,74 +320,6 @@ export function ClassesPage() {
             </Button>) : null}
         </div>
       </div>
-
-      {/* ------------------------------ Schedule ------------------------------ */}
-      {activeTab === "schedule" ? (<section id="schedule" aria-label="Class schedule" className="rounded-xl border border-border/70 bg-card/60 p-4">
-        <div className="grid gap-4 lg:grid-cols-[224px_minmax(0,1fr)]">
-          {/* Filters rail */}
-          <aside className="space-y-4 lg:border-r lg:border-border/60 lg:pr-4">
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">View by</p>
-              <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1" role="group" aria-label="View by">
-                {VIEW_OPTIONS.map((option) => (<button key={option} type="button" onClick={() => setView(option)} aria-pressed={view === option} className={cn("h-8 flex-1 rounded-md text-sm font-medium capitalize transition-colors", view === option
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground")}>
-                    {option}
-                  </button>))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filters</p>
-              <Select value={filters.className} onValueChange={(value) => setFilters((f) => ({ ...f, className: value }))}>
-                <SelectTrigger className="w-full" aria-label="Filter by class">
-                  <SelectValue placeholder="All Classes"/>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All Classes</SelectItem>
-                  {classOptions.map((name) => (<SelectItem key={name} value={name}>{name}</SelectItem>))}
-                </SelectContent>
-              </Select>
-              <Select value={filters.instructor} onValueChange={(value) => setFilters((f) => ({ ...f, instructor: value }))}>
-                <SelectTrigger className="w-full" aria-label="Filter by instructor">
-                  <SelectValue placeholder="All Instructors"/>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All Instructors</SelectItem>
-                  {instructorOptions.map((name) => (<SelectItem key={name} value={name}>{name}</SelectItem>))}
-                  {items.some((gymClass) => !gymClass.trainerName) ? (<SelectItem value="No trainer">No trainer</SelectItem>) : null}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status legend */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
-              <ul className="space-y-1.5">
-                {Object.entries(CLASS_STATUS).map(([key, status]) => (<li key={key} className="flex items-center gap-2 text-sm">
-                    <span className={cn("size-2.5 shrink-0 rounded-full", status.dot)}/>
-                    <span className="text-foreground">{status.label}</span>
-                  </li>))}
-              </ul>
-            </div>
-          </aside>
-
-          {/* Grid / agenda */}
-          <div className="min-w-0">
-            {classes.loading ? (view === "week" ? (<div className="space-y-2">
-                  <Skeleton className="h-12 w-full"/>
-                  <Skeleton className="h-[480px] w-full"/>
-                </div>) : view === "month" ? (<Skeleton className="h-[480px] w-full"/>) : (<Skeleton className="h-[360px] w-full"/>)) : classes.error ? (<ErrorState title="Unable to load the schedule" message={classes.error} onRetry={classes.reload}/>) : total === 0 ? (<EmptyState icon={<CalendarDaysIcon className="size-5"/>} title={view === "month" ? "Nothing scheduled this month" : view === "day" ? "Nothing scheduled this day" : "Nothing scheduled this week"} description={canManage
-                ? "Jump to another period or schedule a new class to fill the calendar."
-                : "No classes are scheduled for this period yet."} action={canManage ? (<Button size="sm" onClick={openCreate}>
-                  <PlusIcon className="size-4"/> Add Class
-                </Button>) : undefined}/>) : view === "week" ? (<WeekTimetable days={days} byDay={byDay} canManage={canManage} onEdit={openEdit} onEnrolments={setManaging} onCancel={setCancelling}/>) : view === "month" ? (<MonthCalendar monthAnchor={anchor} items={filtered} onSelectDay={(day) => {
-                    setAnchor(day);
-                    setView("day");
-                }}/>) : (<DayAgenda day={anchor} items={filtered} canManage={canManage} onEdit={openEdit} onEnrolments={setManaging} onCancel={setCancelling}/>)}
-          </div>
-        </div>
-      </section>) : null}
 
       {/* ------------------------------ Class Slots ------------------------------ */}
       {activeTab === "slots" ? (<ClassSlotsSection/>) : null}

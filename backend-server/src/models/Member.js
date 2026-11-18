@@ -32,7 +32,8 @@ const MemberSchema = new Schema(
     plannedHoursPerDay: { type: Number, default: null },
     /** Preferred front-desk slot ("HH:mm-HH:mm", from gym.timeSlots); null = no preference. */
     preferredSlot: { type: String, default: null },
-    /** Class stream the student belongs to — "Art" | "Dance". */
+    /** Class streams the student attends. classTag remains for older clients. */
+    classTags: { type: [{ type: String, enum: CLASS_TAGS }], default: () => [] },
     classTag: { type: String, enum: [...CLASS_TAGS, null], default: null },
     /** Assigned tag ids (student labels — dance styles, batches, events…). */
     tagIds: { type: [{ type: Schema.Types.ObjectId, ref: "Tag" }], default: () => [] },

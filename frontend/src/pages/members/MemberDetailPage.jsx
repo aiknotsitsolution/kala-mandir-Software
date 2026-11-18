@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import QRCode from "qrcode";
 import { toast } from "sonner";
-import { ArrowLeftIcon, CalendarDaysIcon, ClockIcon, CreditCardIcon, MailIcon, MapPinIcon, PencilIcon, PhoneIcon, PrinterIcon, QrCodeIcon, RefreshCwIcon, ShieldAlertIcon, TagIcon, UserRoundXIcon, UserXIcon, UserCheckIcon, WalletIcon, } from "lucide-react";
+import { ArrowLeftIcon, CalendarDaysIcon, ClockIcon, CreditCardIcon, MailIcon, MapPinIcon, PencilIcon, PhoneIcon, QrCodeIcon, RefreshCwIcon, ShieldAlertIcon, TagIcon, UserRoundXIcon, UserXIcon, UserCheckIcon, WalletIcon, } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState, ErrorState, Skeleton, Stagger } from "@/components/shared/States";
 import { StatusBadge, PaymentBadge } from "@/components/shared/StatusBadge";
@@ -11,14 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton as UiSkeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table";
 import { useAuth, useData } from "@/auth/AuthProvider";
 import { useAsync } from "@/hooks";
 import { durationLabel, formatDateTime, formatDate, formatINR, PAYMENT_METHOD_LABELS, timeSlotLabel, titleCase, } from "@/lib/format";
 import { can } from "@/lib/permissions";
-import { qrPayload, tokenHint } from "@/lib/qr";
 import { MemberFormDialog } from "./MemberFormDialog";
 import { RenewDialog } from "./RenewDialog";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
@@ -43,36 +40,10 @@ export function MemberDetailPage() {
     const history = useAsync(() => data.getMembershipHistory(memberId), [data, memberId]);
     const attendance = useAsync(() => data.listMemberAttendance(memberId, 20), [data, memberId]);
     const payments = useAsync(() => data.listPayments({ memberId, pageSize: 50 }), [data, memberId]);
-    const [qrDataUrl, setQrDataUrl] = useState(null);
     const [editOpen, setEditOpen] = useState(false);
     const [renewOpen, setRenewOpen] = useState(false);
     const [rotateOpen, setRotateOpen] = useState(false);
     const [statusOpen, setStatusOpen] = useState(false);
-    const qrToken = member.data?.qrToken ?? null;
-    useEffect(() => {
-        let cancelled = false;
-        setQrDataUrl(null);
-        if (!qrToken)
-            return;
-        // The QR encodes ONLY the opaque token — never personal data.
-        QRCode.toDataURL(qrPayload(qrToken), {
-            width: 360,
-            margin: 2,
-            errorCorrectionLevel: "M",
-            color: { dark: "#0d0f10", light: "#ffffff" },
-        })
-            .then((url) => {
-            if (!cancelled)
-                setQrDataUrl(url);
-        })
-            .catch(() => {
-            if (!cancelled)
-                setQrDataUrl(null);
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [qrToken]);
     const reloadAll = () => {
         member.reload();
         history.reload();
@@ -122,14 +93,11 @@ export function MemberDetailPage() {
         }
     };
     if (member.loading) {
-        return (<div className="space-y-6">
+        return (<div className="min-w-0 space-y-6">
         <Skeleton className="h-16 w-full max-w-sm"/>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="space-y-4 lg:col-span-2">
-            <Skeleton className="h-56"/>
-            <Skeleton className="h-44"/>
-          </div>
-          <Skeleton className="h-96"/>
+        <div className="space-y-4">
+          <Skeleton className="h-56"/>
+          <Skeleton className="h-44"/>
         </div>
         <Skeleton className="h-64"/>
       </div>);
@@ -147,7 +115,7 @@ export function MemberDetailPage() {
     const current = member.data;
     const membership = current.membership;
     const isActive = current.status === "active";
-    return (<div className="space-y-6">
+    return (<div className="min-w-0 space-y-6">
       <PageHeader breadcrumbs={[{ label: "Students", to: "/members" }, { label: current.fullName }]} title={current.fullName} description={`${current.memberCode} · joined ${formatDate(current.joinDate)}`} actions={canEdit ? (<>
               <Button variant="outline" onClick={() => setEditOpen(true)}>
                 <PencilIcon className="size-4"/> Edit
@@ -164,8 +132,8 @@ export function MemberDetailPage() {
               </Button>
             </>) : null}/>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      <div className="space-y-4">
+        <div className="space-y-4">
           {/* Profile */}
           <Stagger>
             <Card className="graphite-surface border-border/70 print:break-inside-avoid">
@@ -193,11 +161,13 @@ export function MemberDetailPage() {
                   <DetailRow
                     icon={ClockIcon}
                     label="Time slots"
-                    value={(current.slotRanges?.length ? current.slotRanges : current.preferredSlot ? [current.preferredSlot] : [])
-                        .map((slot) => timeSlotLabel(slot))
-                        .join(", ")}
+                    value={current.slotDetails?.length
+                        ? current.slotDetails.map((slot) => `${slot.classTag} · ${slot.name} · ${timeSlotLabel(`${slot.startTime}-${slot.endTime}`)}`).join(", ")
+                        : (current.slotRanges?.length ? current.slotRanges : current.preferredSlot ? [current.preferredSlot] : [])
+                            .map((slot) => timeSlotLabel(slot))
+                            .join(", ")}
                   />
-                  <DetailRow icon={TagIcon} label="Class tag" value={current.classTag}/>
+                  <DetailRow icon={TagIcon} label="Class tags" value={(current.classTags?.length ? current.classTags : current.classTag ? [current.classTag] : []).join(", ")}/>
                   <DetailRow icon={ShieldAlertIcon} label={current.emergencyContactName
             ? `Emergency · ${current.emergencyContactName}`
             : "Emergency contact"} value={current.emergencyContactPhone}/>
@@ -221,7 +191,7 @@ export function MemberDetailPage() {
                     {membership ? "Live plan and validity" : "No plan assigned yet"}
                   </p>
                 </div>
-                {membership ? <StatusBadge status={current.effectiveStatus}/> : null}
+                {membership ? <StatusBadge status={membership.status}/> : null}
               </CardHeader>
               <CardContent>
                 {membership ? (<div className="grid gap-4 sm:grid-cols-2">
@@ -264,49 +234,14 @@ export function MemberDetailPage() {
           </Stagger>
         </div>
 
-        {/* QR card */}
-        <Stagger delayIndex={2}>
-          <Card className="graphite-surface border-border/70 print:break-inside-avoid">
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle className="text-base">QR membership card</CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  Encodes an opaque token — no personal data
-                </p>
-              </div>
-              <Button variant="outline" size="icon-sm" aria-label="Print QR card" onClick={() => window.print()}>
-                <PrinterIcon className="size-4"/>
-              </Button>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center gap-4">
-              {qrDataUrl ? (<img src={qrDataUrl} alt="Membership QR code" className="size-56 rounded-lg bg-white p-2"/>) : (<UiSkeleton className="size-56 rounded-lg"/>)}
-              <div className="space-y-1 text-center">
-                <p className="text-sm font-medium">{current.fullName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {current.memberCode}
-                  {current.planName ? ` · ${current.planName}` : ""}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {membership ? `${formatDate(membership.startDate)} – ${formatDate(membership.endDate)}` : "No active membership"}
-                </p>
-                <p className="font-mono text-[11px] tracking-wide text-muted-foreground">
-                  Token {tokenHint(current.qrToken)}
-                </p>
-              </div>
-              {current.qrStatus === "revoked" ? (<p className="text-xs text-destructive">
-                  This QR was rotated — hand the student their new card.
-                </p>) : null}
-            </CardContent>
-          </Card>
-        </Stagger>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="membership" className="print:hidden">
-        <TabsList>
-          <TabsTrigger value="membership">Membership history</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
+        <TabsList className="w-full sm:w-fit">
+          <TabsTrigger value="membership" className="min-w-0 px-1 text-xs sm:px-2 sm:text-sm">Membership</TabsTrigger>
+          <TabsTrigger value="attendance" className="min-w-0 px-1 text-xs sm:px-2 sm:text-sm">Attendance</TabsTrigger>
+          <TabsTrigger value="payments" className="min-w-0 px-1 text-xs sm:px-2 sm:text-sm">Payments</TabsTrigger>
         </TabsList>
 
         {/* Membership history */}

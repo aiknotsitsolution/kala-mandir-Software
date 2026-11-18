@@ -57,7 +57,7 @@ const createMemberSchema = z.object({
     .union([z.string().trim().email("Enter a valid email address"), z.literal(""), z.null()])
     .optional()
     .transform((v) => v || null),
-  phone: z.string().trim().min(3, "Phone is required"),
+  phone: z.string().trim().regex(/^\+91\d{10}$/, "Enter a valid 10-digit Indian phone number"),
   photoUrl: z.string().nullish(),
   dateOfBirth: z.string().nullish(),
   /** Age in years collected at registration (DOB still supported). */
@@ -75,18 +75,15 @@ const createMemberSchema = z.object({
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/, "Pick a valid time slot")
     .nullish(),
-  /**
-   * Multi-slot selection at signup: every slot the student is assigned on
-   * creation gets its own batch enrollment ("3 slots = 3 classes per day").
-   * Same "HH:mm-HH:mm" strings as preferredSlot; preferredSlot stays the
-   * primary row (first chip picked in the dialog).
-   */
+  /** Legacy time-range selection; new clients use slotIds for tag-specific batches. */
   slotRanges: z
     .array(
       z.string().regex(/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/, "Pick a valid time slot"),
     )
     .max(20, "Select at most 20 time slots")
     .nullish(),
+  /** Selected recurring class slots, resolved by ID and constrained to classTags. */
+  slotIds: z.array(z.string().trim().min(1)).max(20).nullish(),
   /** Selected tag ids (student labels — dance styles, batches, events…). */
   tagIds: z.array(z.string().trim()).max(20, "Pick at most 20 tags").nullish(),
   /** Assigned trainer (StaffProfile._id) — null/"" clears the assignment. */
@@ -94,10 +91,9 @@ const createMemberSchema = z.object({
     .union([z.string().trim().min(1), z.literal(""), z.literal(null)])
     .nullish()
     .transform((v) => v || null),
-  /** Class stream the student belongs to — required on create. */
-  classTag: z.enum(CLASS_TAGS, {
-    errorMap: () => ({ message: "Choose a class tag (Art or Dance)" }),
-  }),
+  /** New clients send one or both streams; classTag is for legacy clients. */
+  classTags: z.array(z.enum(CLASS_TAGS)).max(CLASS_TAGS.length).optional(),
+  classTag: z.enum(CLASS_TAGS).optional(),
   planId: z.string().min(1, "Plan is required"),
   membershipStart: z.string().min(4, "Membership start is required"),
   initialPayment: initialPaymentSchema.nullish(),
@@ -167,10 +163,61 @@ async function resolveTrainerId(gymId, trainerId)
   return found._id;
 }
 
+function normalizeClassTags(tags)
+{
+  const selected = new Set(tags ?? []);
+  return CLASS_TAGS.filter((tag) => selected.has(tag));
+}
+
+function classTagsForMember(member)
+{
+  return normalizeClassTags(
+    Array.isArray(member?.classTags) && member.classTags.length
+      ? member.classTags
+      : member?.classTag ? [member.classTag] : [],
+  );
+}
+
+function classTagsFromInput(input, fallback = [])
+{
+  if (input.classTags !== undefined) return normalizeClassTags(input.classTags);
+  if (input.classTag !== undefined) return normalizeClassTags([input.classTag]);
+  return normalizeClassTags(fallback);
+}
+
+async function resolveMemberClassSlots(gymId, slotIds, classTags, session)
+{
+  const uniqueIds = [...new Set((slotIds ?? []).map(String))];
+  if (uniqueIds.some((id) => !Types.ObjectId.isValid(id)))
+  {
+    throw badRequest("One of the selected class slots is not valid.");
+  }
+  if (!uniqueIds.length) return [];
+  if (!classTags.length)
+  {
+    throw badRequest("Choose at least one class tag before assigning class slots.");
+  }
+  const rows = await ClassSlot.find({
+    _id: { $in: uniqueIds },
+    gymId,
+    classTag: { $in: classTags },
+    isActive: true,
+  })
+    .session(session)
+    .lean();
+  if (rows.length !== uniqueIds.length)
+  {
+    throw badRequest("One or more selected class slots are no longer active for the selected class tags.");
+  }
+  const byId = new Map(rows.map((slot) => [String(slot._id), slot]));
+  return uniqueIds.map((id) => byId.get(id));
+}
+
 const MEMBER_AUDIT_KEYS = [
   "fullName", "email", "phone", "photoUrl", "dateOfBirth", "age", "gender", "address",
   "emergencyContactName", "emergencyContactPhone", "joinDate", "notes", "status", "plannedHoursPerDay",
   "preferredSlot",
+  "classTags",
   "classTag",
   "tagIds",
 ];
@@ -212,7 +259,7 @@ async function attachQuotaToRows(rows)
   }
 }
 
-/** GET /api/members?search&status&planId&sort&dir&page&pageSize → Paginated<MemberWithMembership> */
+/** GET /api/members?search&status&planId&classTag&sort&dir&page&pageSize → Paginated<MemberWithMembership> */
 router.get(
   "/members",
   requireAuth,
@@ -260,6 +307,16 @@ router.get(
     {
       const planId = String(req.query.planId);
       rows = rows.filter((m) => m.membership?.planId === planId);
+    }
+
+    const classTag = String(req.query.classTag ?? "");
+    if (CLASS_TAGS.includes(classTag))
+    {
+      rows = rows.filter((m) => classTagsForMember(m).includes(classTag));
+    }
+    else if (classTag === "both")
+    {
+      rows = rows.filter((m) => classTagsForMember(m).length === CLASS_TAGS.length);
     }
 
     if (req.query.tagId)
@@ -311,18 +368,29 @@ router.get(
     })
       .select("slotId")
       .lean();
+    const classTags = classTagsForMember(member);
     const slots = enrollments.length
       ? await ClassSlot.find({
           _id: { $in: enrollments.map((enrollment) => enrollment.slotId) },
           gymId: ctx.gym._id,
+          classTag: { $in: classTags },
           isActive: true,
         })
-          .select("startTime endTime")
+          .select("_id name classTag startTime endTime")
           .lean()
       : [];
     res.json({
       ...(await decorateMember(member, ctx)),
+      classTags,
       slotRanges: slots.map((slot) => `${slot.startTime}-${slot.endTime}`),
+      slotIds: slots.map((slot) => String(slot._id)),
+      slotDetails: slots.map((slot) => ({
+        id: String(slot._id),
+        name: slot.name,
+        classTag: slot.classTag,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      })),
     });
   }),
 );
@@ -335,6 +403,8 @@ router.post(
   asyncHandler(async (req, res) =>
   {
     const input = parseBody(createMemberSchema, req.body);
+    const classTags = classTagsFromInput(input);
+    if (!classTags.length) throw badRequest("Choose at least one class tag.");
     const ctx = await loadGymContext(req.user.gymId);
     const gymId = ctx.gym._id;
 
@@ -358,6 +428,9 @@ router.post(
           if (dupEmail) throw conflict("A student with this email already exists", "duplicate_email");
         }
 
+        const selectedClassSlots = input.slotIds !== undefined
+          ? await resolveMemberClassSlots(gymId, input.slotIds, classTags, session)
+          : [];
         const memberCode = await nextMemberCode(gymId, session);
         const [member] = await Member.create(
           [
@@ -380,8 +453,11 @@ router.post(
               status: "active",
               notes: input.notes ?? null,
               plannedHoursPerDay: input.plannedHoursPerDay ?? null,
-              preferredSlot: input.preferredSlot ?? (input.slotRanges?.[0] ?? null),
-              classTag: input.classTag,
+              preferredSlot: selectedClassSlots[0]
+                ? `${selectedClassSlots[0].startTime}-${selectedClassSlots[0].endTime}`
+                : input.preferredSlot ?? (input.slotRanges?.[0] ?? null),
+              classTags,
+              classTag: classTags[0],
               tagIds: await resolveTagIds(gymId, input.tagIds ?? []),
               trainerId: await resolveTrainerId(gymId, input.trainerId ?? null),
               createdBy: req.user.id,
@@ -390,74 +466,112 @@ router.post(
           { session },
         );
 
-        // Enroll the student in the batch matching their chosen slots, so they
-        // show up as enrolled in Mark Attendance without a separate step.
-        // MULTI-SLOT: the add-student dialog can now pick several time slots —
-        // every one gets its own batch enrollment ("3 slots = 3 classes a day").
-        // The batch is auto-created from daily time slots if it doesn't exist
-        // yet. preferredSlot (first chip) stays the primary/front-desk row.
-        const ranges = [
-          ...new Set(
-            [...(input.slotRanges ?? []), ...(input.preferredSlot ? [input.preferredSlot] : [])].filter(Boolean),
-          ),
-        ];
-        for (const range of ranges)
+        if (input.slotIds !== undefined)
         {
-          const slotMatch = String(range ?? "").match(
-            /^(([01]\d|2[0-3]):[0-5]\d)-(([01]\d|2[0-3]):[0-5]\d)$/,
-          );
-          if (!slotMatch) continue;
-          const start = slotMatch[1];
-          const end = slotMatch[3];
-          let slot = await ClassSlot.findOne({
-            gymId,
-            startTime: start,
-            endTime: end,
-            isActive: true,
-          })
-            .session(session)
-            .lean();
-          if (!slot)
+          for (const slot of selectedClassSlots)
           {
-            const [created] = await ClassSlot.create(
-              [
-                {
-                  gymId,
-                  name: `${start} – ${end}`,
-                  weekdays: [0, 1, 2, 3, 4, 5, 6],
-                  startTime: start,
-                  endTime: end,
-                  capacity: null,
-                  instructorId: null,
-                  isActive: true,
-                  notes: "Auto-created from student's preferred slot",
-                  createdBy: req.user.id,
-                },
-              ],
-              { session },
-            );
-            slot = created.toObject ? created.toObject() : created;
+            const existingEnrollment = await SlotEnrollment.findOne({
+              gymId,
+              slotId: slot._id,
+              memberId: member._id,
+            })
+              .session(session)
+              .lean();
+            if (existingEnrollment?.status === "enrolled") continue;
+            if (slot.capacity != null)
+            {
+              const enrolledCount = await SlotEnrollment.countDocuments({
+                gymId,
+                slotId: slot._id,
+                status: "enrolled",
+              }).session(session);
+              if (enrolledCount >= slot.capacity)
+              {
+                throw conflict(`The ${slot.startTime} – ${slot.endTime} slot is at capacity.`, "slot_full");
+              }
+            }
+            if (existingEnrollment)
+            {
+              await SlotEnrollment.updateOne(
+                { _id: existingEnrollment._id },
+                { $set: { status: "enrolled", enrolledAt: new Date() } },
+                { session },
+              );
+            } else
+            {
+              await SlotEnrollment.create(
+                [{ gymId, slotId: slot._id, memberId: member._id, status: "enrolled" }],
+                { session },
+              );
+            }
           }
-          const existingEnrollment = await SlotEnrollment.findOne({
-            gymId,
-            slotId: slot._id,
-            memberId: member._id,
-          })
-            .session(session)
-            .lean();
-          if (!existingEnrollment)
+        } else
+        {
+          const ranges = [
+            ...new Set(
+              [...(input.slotRanges ?? []), ...(input.preferredSlot ? [input.preferredSlot] : [])].filter(Boolean),
+            ),
+          ];
+          for (const range of ranges)
           {
-            await SlotEnrollment.create(
-              [{ gymId, slotId: slot._id, memberId: member._id, status: "enrolled" }],
-              { session },
+            const slotMatch = String(range ?? "").match(
+              /^(([01]\d|2[0-3]):[0-5]\d)-(([01]\d|2[0-3]):[0-5]\d)$/,
             );
-          } else if (existingEnrollment.status !== "enrolled")
-          {
-            await SlotEnrollment.updateOne(
-              { _id: existingEnrollment._id },
-              { $set: { status: "enrolled" } },
-              { session },
-            );
+            if (!slotMatch) continue;
+            const start = slotMatch[1];
+            const end = slotMatch[3];
+            let slot = await ClassSlot.findOne({
+              gymId,
+              startTime: start,
+              endTime: end,
+              classTag: classTags[0],
+              isActive: true,
+            })
+              .session(session)
+              .lean();
+            if (!slot)
+            {
+              const [created] = await ClassSlot.create(
+                [
+                  {
+                    gymId,
+                    name: `${classTags[0]} · ${start} – ${end}`,
+                    weekdays: [0, 1, 2, 3, 4, 5, 6],
+                    startTime: start,
+                    endTime: end,
+                    capacity: null,
+                    classTag: classTags[0],
+                    instructorId: null,
+                    isActive: true,
+                    notes: "Auto-created from student's preferred slot",
+                    createdBy: req.user.id,
+                  },
+                ],
+                { session },
+              );
+              slot = created.toObject ? created.toObject() : created;
+            }
+            const existingEnrollment = await SlotEnrollment.findOne({
+              gymId,
+              slotId: slot._id,
+              memberId: member._id,
+            })
+              .session(session)
+              .lean();
+            if (!existingEnrollment)
+            {
+              await SlotEnrollment.create(
+                [{ gymId, slotId: slot._id, memberId: member._id, status: "enrolled" }],
+                { session },
+              );
+            } else if (existingEnrollment.status !== "enrolled")
+            {
+              await SlotEnrollment.updateOne(
+                { _id: existingEnrollment._id },
+                { $set: { status: "enrolled" } },
+                { session },
+              );
+            }
           }
         }
 
@@ -569,6 +683,13 @@ router.patch(
     }
     if (input.email !== undefined) updates.email = input.email || null;
     if (input.status !== undefined) updates.status = input.status;
+    if (input.classTags !== undefined || input.classTag !== undefined)
+    {
+      const classTags = classTagsFromInput(input, classTagsForMember(member));
+      if (!classTags.length) throw badRequest("Choose at least one class tag.");
+      updates.classTags = classTags;
+      updates.classTag = classTags[0];
+    }
 
     if (updates.email)
     {
@@ -594,24 +715,34 @@ router.patch(
       const current = await Member.findOne({ _id: member._id, gymId: ctx.gym._id }).session(session).lean();
       if (!current) throw notFound("Student not found");
 
-      const saved = await Member.findOneAndUpdate(
-        { _id: current._id, gymId: ctx.gym._id },
-        { $set: updates },
-        { new: true, runValidators: true, session },
-      ).lean();
-
-      if (input.slotRanges !== undefined)
+      const targetClassTags = classTagsFromInput(input, classTagsForMember(current));
+      if (!targetClassTags.length && (
+        input.classTags !== undefined
+        || input.classTag !== undefined
+        || input.slotIds !== undefined
+        || input.slotRanges !== undefined
+      ))
       {
+        throw badRequest("Choose at least one class tag.");
+      }
+      const currentClassTags = classTagsForMember(current);
+      const classTagsChanged = targetClassTags.length !== currentClassTags.length
+        || targetClassTags.some((tag) => !currentClassTags.includes(tag));
+      const shouldSyncSlotEnrollments =
+        input.slotIds !== undefined || input.slotRanges !== undefined || classTagsChanged;
+      let slotsToEnroll = [];
+      if (input.slotIds !== undefined || classTagsChanged)
+      {
+        slotsToEnroll = await resolveMemberClassSlots(
+          ctx.gym._id,
+          input.slotIds ?? [],
+          targetClassTags,
+          session,
+        );
+      } else if (input.slotRanges !== undefined)
+      {
+        const classTag = targetClassTags[0];
         const ranges = [...new Set(input.slotRanges ?? [])];
-        const activeEnrollments = await SlotEnrollment.find({
-          gymId: ctx.gym._id,
-          memberId: current._id,
-          status: "enrolled",
-        })
-          .session(session)
-          .lean();
-        const keepSlotIds = new Set();
-
         for (const range of ranges)
         {
           const [startTime, endTime] = range.split("-");
@@ -619,6 +750,7 @@ router.patch(
             gymId: ctx.gym._id,
             startTime,
             endTime,
+            classTag,
             isActive: true,
           })
             .session(session)
@@ -630,6 +762,7 @@ router.patch(
               gymId: ctx.gym._id,
               startTime,
               endTime,
+              classTag,
               isActive: false,
             })
               .session(session)
@@ -637,7 +770,7 @@ router.patch(
             if (inactiveMatch)
             {
               throw conflict(
-                `The ${startTime} – ${endTime} slot is inactive. Activate it in Manage Institute before assigning it.`,
+                `The ${startTime} – ${endTime} class slot is inactive. Activate it in Classes & Schedule before assigning it.`,
                 "slot_inactive",
               );
             }
@@ -646,12 +779,12 @@ router.patch(
               [
                 {
                   gymId: ctx.gym._id,
-                  name: `${startTime} – ${endTime}`,
+                  name: `${classTag ? `${classTag} · ` : ""}${startTime} – ${endTime}`,
                   weekdays: [0, 1, 2, 3, 4, 5, 6],
                   startTime,
                   endTime,
                   capacity: null,
-                  classTag: updates.classTag ?? current.classTag ?? null,
+                  classTag,
                   instructorId: null,
                   isActive: true,
                   notes: "Auto-created from student's preferred slot",
@@ -662,7 +795,41 @@ router.patch(
             );
             slot = createdSlot.toObject();
           }
+          slotsToEnroll.push(slot);
+        }
+      }
 
+      if (shouldSyncSlotEnrollments)
+      {
+        updates.preferredSlot = slotsToEnroll[0]
+          ? `${slotsToEnroll[0].startTime}-${slotsToEnroll[0].endTime}`
+          : null;
+      }
+      if (input.classTags !== undefined || input.classTag !== undefined)
+      {
+        updates.classTags = targetClassTags;
+        updates.classTag = targetClassTags[0];
+      }
+
+      const saved = await Member.findOneAndUpdate(
+        { _id: current._id, gymId: ctx.gym._id },
+        { $set: updates },
+        { new: true, runValidators: true, session },
+      ).lean();
+
+      if (shouldSyncSlotEnrollments)
+      {
+        const activeEnrollments = await SlotEnrollment.find({
+          gymId: ctx.gym._id,
+          memberId: current._id,
+          status: "enrolled",
+        })
+          .session(session)
+          .lean();
+        const keepSlotIds = new Set();
+
+        for (const slot of slotsToEnroll)
+        {
           keepSlotIds.add(String(slot._id));
           const existing = await SlotEnrollment.findOne({
             gymId: ctx.gym._id,
@@ -682,7 +849,7 @@ router.patch(
             }).session(session);
             if (enrolledCount >= slot.capacity)
             {
-              throw conflict(`The ${startTime} – ${endTime} slot is at capacity.`, "slot_full");
+              throw conflict(`The ${slot.startTime} – ${slot.endTime} slot is at capacity.`, "slot_full");
             }
           }
 

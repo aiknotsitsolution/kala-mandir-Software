@@ -114,8 +114,11 @@ export function toMember(doc) {
     plannedHoursPerDay: doc.plannedHoursPerDay ?? null,
     /** Preferred front-desk slot ("HH:mm-HH:mm"); null = no preference. */
     preferredSlot: doc.preferredSlot ?? null,
-    /** Class stream the student belongs to — "Art" | "Dance". */
-    classTag: doc.classTag ?? null,
+    /** Class streams, falling back to the legacy single-tag field. */
+    classTags: Array.isArray(doc.classTags) && doc.classTags.length
+      ? [...new Set(doc.classTags)]
+      : (doc.classTag ? [doc.classTag] : []),
+    classTag: doc.classTag ?? doc.classTags?.[0] ?? null,
     /** Assigned tag ids (student labels — styles, batches, events…). */
     tagIds: (doc.tagIds ?? []).map((t) => String(t)),
     /** Assigned trainer id (StaffProfile._id), null = unassigned. */
