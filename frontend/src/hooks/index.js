@@ -1,52 +1,77 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { registerQueryExecutor, useLazyExecuteQueryQuery } from "@/data/api/queryApi";
+
+const objectIds = new WeakMap();
+let nextObjectId = 1;
+
+function objectId(value) {
+    if (!objectIds.has(value))
+        objectIds.set(value, nextObjectId++);
+    return objectIds.get(value);
+}
+
+function serializeDependency(value) {
+    if (value === null)
+        return "null";
+    if (value === undefined)
+        return "undefined";
+    if (value instanceof Date)
+        return `date:${value.toISOString()}`;
+    if (Array.isArray(value))
+        return `[${value.map(serializeDependency).join(",")}]`;
+    if (typeof value === "object") {
+        if (value.mode === "api" && typeof value.gymId === "string")
+            return `data-service:${value.gymId}`;
+        const prototype = Object.getPrototypeOf(value);
+        if (prototype === Object.prototype || prototype === null) {
+            return `{${Object.keys(value)
+                .sort()
+                .map((key) => `${JSON.stringify(key)}:${serializeDependency(value[key])}`)
+                .join(",")}}`;
+        }
+        return `object:${objectId(value)}`;
+    }
+    if (typeof value === "function")
+        return `function:${objectId(value)}`;
+    return `${typeof value}:${String(value)}`;
+}
+
+function queryKey(fn, deps) {
+    return JSON.stringify([fn.toString(), deps.map(serializeDependency)]);
+}
+
 /**
- * Small data-fetching helper: skips work when `enabled` is false, de-dupes
- * rapid reloads and cleans up on unmount.
+ * RTK Query cache adapter for existing data calls. Callers provide complete
+ * dependencies, which are used with the query callback to deduplicate/cache requests.
  */
 export function useAsync(fn, deps, options) {
     const enabled = options?.enabled ?? true;
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(enabled);
-    const [error, setError] = useState(null);
-    const [tick, setTick] = useState(0);
     const fnRef = useRef(fn);
     fnRef.current = fn;
-    const mounted = useRef(true);
+    const key = queryKey(fn, deps);
+    const [trigger, query] = useLazyExecuteQueryQuery();
     useEffect(() => {
-        mounted.current = true;
-        return () => {
-            mounted.current = false;
-        };
-    }, []);
-    useEffect(() => {
-        if (!enabled) {
-            setLoading(false);
+        if (!enabled)
             return;
-        }
-        let cancelled = false;
-        setLoading(true);
-        setError(null);
-        fnRef
-            .current()
-            .then((result) => {
-            if (!cancelled && mounted.current) {
-                setData(result);
-                setLoading(false);
-            }
-        })
-            .catch((err) => {
-            if (!cancelled && mounted.current) {
-                setError(err instanceof Error ? err.message : "Something went wrong.");
-                setLoading(false);
-            }
-        });
+        registerQueryExecutor(key, () => fnRef.current());
+        const request = trigger(key, true);
         return () => {
-            cancelled = true;
+            request.unsubscribe();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [...deps, enabled, tick]);
-    const reload = useCallback(() => setTick((t) => t + 1), []);
-    return { data, loading, error, reload };
+    }, [enabled, key, trigger]);
+    const reload = useCallback(() => {
+        if (!enabled)
+            return;
+        registerQueryExecutor(key, () => fnRef.current());
+        trigger(key);
+    }, [enabled, key, trigger]);
+    const error = query.error?.error ?? query.error?.data?.message ?? null;
+    return {
+        data: query.currentData ?? null,
+        loading: enabled && (query.isUninitialized || query.isFetching),
+        error,
+        reload,
+    };
 }
 /** Debounce a rapidly changing value (search inputs). */
 export function useDebounced(value, delay = 300) {

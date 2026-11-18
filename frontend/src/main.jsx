@@ -1,13 +1,17 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { Provider } from "react-redux";
 import App from "./App";
 import "./index.css";
 import { applyTheme, readCachedTheme } from "@/lib/theme";
+import { store } from "@/store";
 // Apply the cached institute theme before first paint to avoid a flash.
 applyTheme(readCachedTheme());
 const container = document.getElementById("root");
 if (!container)
     throw new Error("Root container #root is missing from index.html");
 createRoot(container).render(<StrictMode>
-    <App />
+    <Provider store={store}>
+      <App />
+    </Provider>
   </StrictMode>);

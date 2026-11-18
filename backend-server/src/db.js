@@ -35,6 +35,7 @@ export async function connectDb(uri = config.mongoUri) {
       throw err;
     }
   }
+  console.log("✅ MongoDB connected successfully");
   return mongoose.connection;
 }
 

@@ -1,8 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlansPage } from "./PlansPage";
+import { queryApi } from "@/data/api/queryApi";
+import { store } from "@/store";
 
 /* The page reads auth + the data layer from the provider. Mock the provider
    with an in-memory plan fixture so the real filtering/view/dialog logic runs
@@ -23,9 +26,11 @@ const FIXTURE_PLANS = [
 ];
 
 function renderPage() {
-    return render(<MemoryRouter initialEntries={["/plans"]}>
-      <PlansPage/>
-    </MemoryRouter>);
+    return render(<Provider store={store}>
+      <MemoryRouter initialEntries={["/plans"]}>
+        <PlansPage/>
+      </MemoryRouter>
+    </Provider>);
 }
 
 const searchInput = () => screen.getByRole("textbox", { name: /search plans by name/i });
@@ -33,6 +38,7 @@ const listRadio = () => screen.getByRole("radio", { name: /list view/i });
 const gridRadio = () => screen.getByRole("radio", { name: /grid view/i });
 
 beforeEach(() => {
+    store.dispatch(queryApi.util.resetApiState());
     Object.assign(mockData, {
         listPlans: vi.fn(async () => FIXTURE_PLANS),
         getPlanDistribution: vi.fn(async () => [{ planId: "p1", count: 3 }]),

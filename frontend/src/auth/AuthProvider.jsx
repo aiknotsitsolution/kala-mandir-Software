@@ -1,70 +1,113 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { Navigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { appMode, getAuthProvider, getDataService } from "@/data";
+import { queryApi } from "@/data/api/queryApi";
 import { applyTheme } from "@/lib/theme";
-const AuthContext = createContext(null);
+import { authCheckFailed, authCheckStarted, authSessionChanged } from "@/store/authSlice";
+
+const MUTATING_METHODS = new Set([
+    "updateProfile", "updateSettings",
+    "createMember", "updateMember", "deleteMember", "setMemberStatus",
+    "renewMembership", "setMembershipStatus", "rotateQrToken",
+    "createPlan", "updatePlan", "archivePlan",
+    "checkInByToken", "checkInByMemberCode", "recordCheckout", "correctAttendance", "remindCheckout",
+    "createPayment", "refundPayment", "uploadPhoto", "changeMyPassword",
+    "readMyReminders", "readMyReminder", "rotateGymQr", "updateTimeSlots",
+    "updateCheckinSettings", "updateTheme", "gymScan", "checkinGym",
+    "createStaff", "updateStaff", "archiveStaff", "deleteStaff",
+    "assignStaffSlots", "assignStaffStudents",
+    "createClass", "updateClass", "cancelClass", "enroll", "cancelEnrollment", "setEnrollmentStatus",
+    "createClassSlot", "updateClassSlot", "archiveClassSlot", "enrollSlotStudent", "unenrollSlotStudent",
+    "markClassAttendance", "markDemoAttendance", "markRosterAttendance",
+    "markNotificationRead", "markAllNotificationsRead", "generateNotifications",
+]);
+
+function setAuthSession(dispatch, session) {
+    dispatch(queryApi.util.resetApiState());
+    dispatch(authSessionChanged(session));
+}
+
+function dataServiceFor(session, dispatch) {
+    if (!session)
+        return null;
+    const service = getDataService(session);
+    return new Proxy(service, {
+        get(target, property) {
+            const value = Reflect.get(target, property, target);
+            if (typeof value !== "function")
+                return value;
+            if (!MUTATING_METHODS.has(property))
+                return value.bind(target);
+            return async (...args) => {
+                const result = await value.apply(target, args);
+                dispatch(queryApi.util.invalidateTags(["Data"]));
+                return result;
+            };
+        },
+    });
+}
+
+async function refreshAuthSession(dispatch, mode) {
+    dispatch(authCheckStarted());
+    if (mode === "unconfigured") {
+        setAuthSession(dispatch, null);
+        return;
+    }
+    try {
+        const next = await getAuthProvider().getSession();
+        setAuthSession(dispatch, next);
+    }
+    catch (err) {
+        dispatch(queryApi.util.resetApiState());
+        dispatch(authCheckFailed(err instanceof Error ? err.message : "Unable to verify your session."));
+    }
+}
+
 export function AuthProvider({ children }) {
-    const [session, setSession] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const dispatch = useDispatch();
+    const session = useSelector((state) => state.auth.session);
     const mode = appMode();
-    const refresh = useCallback(async () => {
-        if (mode === "unconfigured") {
-            setSession(null);
-            setLoading(false);
-            return;
-        }
-        try {
-            const next = await getAuthProvider().getSession();
-            setSession(next);
-            setError(null);
-        }
-        catch (err) {
-            setSession(null);
-            setError(err instanceof Error ? err.message : "Unable to verify your session.");
-        }
-        finally {
-            setLoading(false);
-        }
-    }, [mode]);
+    const refresh = useCallback(() => refreshAuthSession(dispatch, mode), [dispatch, mode]);
     useEffect(() => {
         void refresh();
         if (mode === "unconfigured")
             return;
         const unsubscribe = getAuthProvider().onAuthChange((next) => {
-            setSession(next);
+            setAuthSession(dispatch, next);
         });
         return unsubscribe;
-    }, [refresh, mode]);
+    }, [dispatch, refresh, mode]);
     // Institute-wide theme (admin sets it in Manage Institute) drives the whole
     // platform — staff app + member portal + login screen.
     useEffect(() => {
         if (session?.gym?.themeMode || session?.gym?.themeAccent)
             applyTheme({ mode: session.gym.themeMode, accent: session.gym.themeAccent });
     }, [session?.gym?.themeMode, session?.gym?.themeAccent]);
+    return children;
+}
+
+export function useAuth() {
+    const dispatch = useDispatch();
+    const { session, loading, error } = useSelector((state) => state.auth);
+    const mode = appMode();
+    const data = useMemo(() => dataServiceFor(session, dispatch), [session, dispatch]);
+    const refresh = useCallback(() => refreshAuthSession(dispatch, mode), [dispatch, mode]);
     const signIn = useCallback(async (credentials) => {
         const next = await getAuthProvider().signIn(credentials);
-        setSession(next);
-        setError(null);
+        setAuthSession(dispatch, next);
         toast.success(`Welcome back, ${next.profile.fullName.split(" ")[0]}`);
         return next;
-    }, []);
+    }, [dispatch]);
     const signOut = useCallback(async () => {
         await getAuthProvider().signOut();
-        setSession(null);
+        setAuthSession(dispatch, null);
         toast.info("Signed out");
-    }, []);
-    const data = useMemo(() => (session ? getDataService(session) : null), [session]);
-    const value = useMemo(() => ({ session, data, loading, error, mode, signIn, signOut, refresh }), [session, data, loading, error, mode, signIn, signOut, refresh]);
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    }, [dispatch]);
+    return { session, data, loading, error, mode, signIn, signOut, refresh };
 }
-export function useAuth() {
-    const ctx = useContext(AuthContext);
-    if (!ctx)
-        throw new Error("useAuth must be used inside <AuthProvider>");
-    return ctx;
-}
+
 export function useSession() {
     const { session } = useAuth();
     if (!session)
@@ -72,11 +115,14 @@ export function useSession() {
     return session;
 }
 export function useData() {
-    const { data } = useAuth();
+    const dispatch = useDispatch();
+    const session = useSelector((state) => state.auth.session);
+    const data = useMemo(() => dataServiceFor(session, dispatch), [session, dispatch]);
     if (!data)
         throw new Error("Data service is unavailable");
     return data;
 }
+
 /** Route guard: redirects to /login (or setup) while the session resolves. */
 export function RequireAuth({ children }) {
     const { session, loading, mode } = useAuth();

@@ -492,11 +492,15 @@ export class ApiDataService {
         return apiPost("/gym/qr/rotate");
     }
     async updateTimeSlots(timeSlots) {
-        return apiPatch("/gym", { timeSlots });
+        const updated = await apiPatch("/gym", { timeSlots });
+        invalidateGymCache();
+        return updated;
     }
     /** Guard rails for member self check-ins: slot hours + GPS range. */
     async updateCheckinSettings(input) {
-        return apiPatch("/gym", input);
+        const updated = await apiPatch("/gym", input);
+        invalidateGymCache();
+        return updated;
     }
     /** Institute-wide theme (palette + light/dark mode). */
     async updateTheme(patch) {
