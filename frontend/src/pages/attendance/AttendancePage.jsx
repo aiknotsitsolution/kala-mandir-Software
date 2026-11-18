@@ -8,6 +8,7 @@ import {
     CheckIcon,
     ChevronDownIcon,
     ChevronLeftIcon,
+    ChevronRightIcon,
     ClipboardCheckIcon,
     DownloadIcon,
     EyeIcon,
@@ -50,6 +51,7 @@ const STATUS_META = {
     holiday: { label: "Holiday", short: "H", dot: "bg-sky-500", chip: "border-sky-500/40 bg-sky-500/15 text-sky-600 dark:text-sky-400", activeText: "text-sky-600 dark:text-sky-400", activeRing: "border-sky-500 bg-sky-500", hover: "hover:border-sky-500/40 hover:bg-sky-500/5 hover:text-sky-600 dark:hover:text-sky-400", tick: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400", tickDot: "bg-sky-500" },
 };
 const STATUS_ORDER = ["present", "absent", "leave", "holiday"];
+const MARK_PAGE_SIZE = 20;
 
 function StatusChip({ status }) {
     const meta = STATUS_META[status];
@@ -89,9 +91,9 @@ function PaymentChip({ method }) {
  *    the tab bar (slot-group chip, time chip, clickable date chip, search
  *    field), then the roster flows as plain student cards.
  *  - variant="inline": sm+ toolbar row — unchanged desktop flow, h-8 fields. */
-function SlotFilters({ variant, slotsLoading, activeSlots, loadAll, slotGroup, slotPick, markDate, studentQuery, trainerFilter, trainerOptions, hasUnassignedTrainer, groupedSlots, currentGroupSlots, onSlotGroup, onSlotPick, onDate, onSearch, onTrainerChange }) {
+function SlotFilters({ variant, slotsLoading, activeSlots, slotGroup, slotPick, markDate, studentQuery, trainerFilter, trainerOptions, hasUnassignedTrainer, groupedSlots, currentGroupSlots, onSlotGroup, onSlotPick, onDate, onSearch, onTrainerChange }) {
     const chip = variant === "chip";
-    const disabled = slotsLoading || activeSlots.length === 0 || loadAll;
+    const disabled = slotsLoading || activeSlots.length === 0;
     const groupOpts = (<>
       <option value="all">{chip ? "All" : "Slot: All"}</option>
       {SLOT_GROUPS.map((group) => {
@@ -329,13 +331,11 @@ export function AttendancePage() {
 
     /* Mark-tab filter handlers — shared by the mobile grid and the sm+ toolbar. */
     const handleSlotGroup = (value) => {
-        setLoadAll(false);
         setSlotGroup(value);
-        setSlotPick("");
+        setSlotPick(value === "all" ? "__all__" : "");
     };
     const handleSlotPick = (value) => {
         if (value === "") { setSlotPick(""); return; }
-        setLoadAll(false);
         setSlotPick(value);
     };
 
@@ -349,12 +349,12 @@ export function AttendancePage() {
 
     // One two-level "Slot" dropdown (Morning / Afternoon / Evening → that
     // group's time slots). Only one group can be open at a time. Within it the
-    // pick is either "__all__" (Select All Slots) or a single class-slot id.
+    // pick is either "__all__" (all slots in the selected group) or a slot id.
     const [slotGroup, setSlotGroup] = useState("all"); // "all"|"morning"|"afternoon"|"evening"
     const [slotPick, setSlotPick] = useState(""); // slotId | "__all__" | ""
-    const [loadAll, setLoadAll] = useState(false); // Load All → every active slot's students
     const [markDate, setMarkDate] = useState(() => ymdOf(new Date()));
     const [loadedQuery, setLoadedQuery] = useState(null); // { slotIds: [], date }
+    const [studentsPage, setStudentsPage] = useState(1);
 
     const groupedSlots = useMemo(() => groupSlotsByTime(activeSlots, "startTime"), [activeSlots]);
     /* Two cascading dropdowns: "Slot" (All/Morning/Afternoon/Evening) and
@@ -364,12 +364,11 @@ export function AttendancePage() {
 
     // Which class slots the current pick resolves to.
     const selectedSlotIds = useMemo(() => {
-        if (loadAll) return activeSlots.map((s) => s.id);
         if (!slotPick) return [];
         const list = slotGroup === "all" ? activeSlots : (groupedSlots[slotGroup] ?? []);
         if (slotPick === "__all__") return list.map((s) => s.id);
         return list.some((s) => s.id === slotPick) ? [slotPick] : [];
-    }, [loadAll, slotGroup, slotPick, groupedSlots, activeSlots]);
+    }, [slotGroup, slotPick, groupedSlots, activeSlots]);
     const [statuses, setStatuses] = useState({}); // memberId -> attendance status (local, unsaved)
     const [savedStatuses, setSavedStatuses] = useState({}); // last persisted statuses
     const [savingId, setSavingId] = useState(null); // single-row save (edit mode)
@@ -402,6 +401,9 @@ export function AttendancePage() {
         }
         setLoadedQuery({ slotIds: selectedKey.split(","), date: markDate });
     }, [selectedKey, markDate]);
+    useEffect(() => {
+        setStudentsPage(1);
+    }, [selectedKey, markDate, studentQuery, trainerFilter]);
 
     // Combined roster: fetch every selected slot's roster in parallel and merge
     // students (deduped by member), tagging each with the slot they belong to
@@ -460,6 +462,11 @@ export function AttendancePage() {
                 (student.memberCode ?? "").toLowerCase().includes(q);
         });
     }, [students, studentQuery, trainerFilter]);
+    const studentsTotalPages = Math.max(1, Math.ceil(filteredStudents.length / MARK_PAGE_SIZE));
+    const visibleStudents = filteredStudents.slice((studentsPage - 1) * MARK_PAGE_SIZE, studentsPage * MARK_PAGE_SIZE);
+    useEffect(() => {
+        if (studentsPage > studentsTotalPages) setStudentsPage(studentsTotalPages);
+    }, [studentsPage, studentsTotalPages]);
 
     /* ------------------------------ walk-in students ------------------------- */
     // Students from OTHER slots who show up at a different time: search finds
@@ -570,7 +577,11 @@ export function AttendancePage() {
         return { from: start.toISOString(), to: new Date(start.getTime() + 86_399_999).toISOString() };
     }, [viewDate]);
 
-    const list = useAsync(() => data.listAttendance({ from: dayRange.from, to: dayRange.to, page: 1, pageSize: 100 }), [data, dayRange], { enabled: activeTab === "view" });
+    const list = useAsync(() => data.listAttendance({ from: dayRange.from, to: dayRange.to, page: 1, pageSize: 100 }), [data, dayRange], {
+        enabled: activeTab === "view",
+        pollingInterval: 60_000,
+        skipPollingIfUnfocused: true,
+    });
 
     /* --------- View All: attendance by day — one date chip, no filters ------- */
     const [viewAllDate, setViewAllDate] = useState(() => ymdOf(new Date()));
@@ -783,7 +794,6 @@ export function AttendancePage() {
             variant="chip"
             slotsLoading={slots.loading}
             activeSlots={activeSlots}
-            loadAll={loadAll}
             slotGroup={slotGroup}
             slotPick={slotPick}
             markDate={markDate}
@@ -805,18 +815,16 @@ export function AttendancePage() {
       <Card className="rounded-none border-0 bg-transparent py-0 shadow-none sm:rounded-xl sm:border sm:border-border/70 sm:bg-card sm:py-6 sm:shadow-sm">
         <CardContent className="space-y-2.5 p-2 sm:space-y-5 sm:p-5">
 
-          {(loadAll || slotPick) ? (() => {
+          {slotPick ? (() => {
             const instructorNames = [...new Set(selectedSlots
               .map((s) => s.instructorName)
               .filter(Boolean))];
-            const slotCountText = loadAll || slotPick === "__all__"
+            const slotCountText = slotPick === "__all__"
               ? `${selectedSlots.length} slots`
               : `${selectedSlots.length} slot`;
-            const detailText = loadAll
-              ? `${selectedSlots.length} slots — every student loaded, each saved to their own slot`
-              : slotPick === "__all__"
-                ? `${selectedSlots.length} slots selected — each student is saved to their own slot`
-                : `${selectedSlots.length} slot selected`;
+            const detailText = slotPick === "__all__"
+              ? `${selectedSlots.length} slots selected — each student is saved to their own slot`
+              : `${selectedSlots.length} slot selected`;
             return (<>
               {/* Mobile: small compact chips (the long explanation rides as a tooltip) */}
               <div className="flex flex-wrap items-center gap-1.5 sm:hidden">
@@ -829,7 +837,7 @@ export function AttendancePage() {
               </div>
               {/* sm+: descriptive info row */}
               <div className="hidden flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:flex">
-                <span className="font-semibold text-foreground">{loadAll ? "Load All:" : slotGroup === "all" ? "All Slots:" : `${activeGroup?.label}:`}</span>
+                <span className="font-semibold text-foreground">{slotGroup === "all" ? "All Slots:" : `${activeGroup?.label}:`}</span>
                 {detailText}
                 {instructorNames.length > 0 ? (<Badge variant="outline" className="gap-1 border-primary/30 bg-primary/10 px-2 py-0 font-medium text-primary">
                     <UsersIcon className="size-3"/> {instructorNames.join(", ")}
@@ -860,7 +868,6 @@ export function AttendancePage() {
                 variant="inline"
                 slotsLoading={slots.loading}
                 activeSlots={activeSlots}
-                loadAll={loadAll}
                 slotGroup={slotGroup}
                 slotPick={slotPick}
                 markDate={markDate}
@@ -889,7 +896,7 @@ export function AttendancePage() {
               </div>) : filteredStudents.length === 0 ? (<div className="px-2 py-5 text-center text-sm text-muted-foreground sm:px-4 sm:py-8">
                     No students match the selected filters.
               </div>) : (<ul className="space-y-2 p-0 sm:space-y-0 sm:divide-y sm:divide-border/60 sm:p-0">
-                {filteredStudents.map((s) => {
+                {visibleStudents.map((s) => {
               const saved = savedStatuses[s.memberId] ?? null;
               const isEditing = editingId === s.memberId;
               const isSaved = Boolean(saved) && !isEditing;
@@ -995,25 +1002,35 @@ export function AttendancePage() {
               </ul>
             </div>) : null}
 
-          {/* Save bar — Load All + bulk commit at the bottom of the sheet.
+          {filteredStudents.length > MARK_PAGE_SIZE ? (<div className="flex flex-col gap-2 border-t border-border/70 px-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+              <p className="text-xs text-muted-foreground">
+                Showing {(studentsPage - 1) * MARK_PAGE_SIZE + 1}–{Math.min(studentsPage * MARK_PAGE_SIZE, filteredStudents.length)} of {filteredStudents.length} students
+              </p>
+              <div className="flex items-center justify-between gap-2 sm:justify-end">
+                <Button size="sm" variant="outline" aria-label="Previous students" disabled={studentsPage <= 1} onClick={() => setStudentsPage((page) => Math.max(1, page - 1))}>
+                  <ChevronLeftIcon/> Previous
+                </Button>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  Page {studentsPage} of {studentsTotalPages}
+                </span>
+                <Button size="sm" variant="outline" aria-label="Next students" disabled={studentsPage >= studentsTotalPages} onClick={() => setStudentsPage((page) => Math.min(studentsTotalPages, page + 1))}>
+                  Next <ChevronRightIcon/>
+                </Button>
+              </div>
+            </div>) : null}
+
+          {/* Bulk commit at the bottom of the sheet.
               Mobile: only the two buttons (no box/status line); sm+ keeps the
               full-width footer with the status text. */}
           <div className="flex flex-wrap items-center justify-end gap-2 sm:w-full sm:flex-nowrap sm:items-center sm:justify-between sm:border-t sm:border-border/70 sm:px-4 sm:py-3">
               <p className="hidden text-xs text-muted-foreground sm:block">
                 {students.length === 0
-                  ? "No students loaded — pick a slot or Load All."
+                  ? "No students loaded — select a slot."
                   : hasChanges
                     ? `${pendingCount} ${pendingCount === 1 ? "change" : "changes"} unsaved`
                     : "All changes saved"}
               </p>
               <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
-                <Button size="sm" variant="outline" className="h-8 flex-1 gap-1.5 px-3 sm:flex-none" disabled={slots.loading || activeSlots.length === 0 || loadAll} onClick={() => {
-                setLoadAll(true);
-                setSlotGroup("all");
-                setSlotPick("");
-              }}>
-                  <UsersIcon className="size-3.5"/> Load All
-                </Button>
                 <Button size="sm" className="h-8 flex-1 gap-1.5 px-4 sm:flex-none" disabled={students.length === 0 || !hasChanges || savingAll} onClick={saveAll}>
                   {savingAll ? <Loader2Icon className="size-3.5 animate-spin"/> : <SaveIcon className="size-3.5"/>}
                   Save{pendingCount > 0 ? ` (${pendingCount})` : ""}

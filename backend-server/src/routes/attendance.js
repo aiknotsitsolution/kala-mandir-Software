@@ -30,6 +30,7 @@ import {
 import { loadGymContext } from "../services/context.js";
 import { runCheckIn } from "../services/checkin.js";
 import { markSlotAttendance, markDemoAttendance, markRosterAttendance } from "../services/classAttendance.js";
+import { autoCheckoutDueAttendance } from "../services/autoCheckout.js";
 import { notifyIfOverPlanned } from "../services/overtime.js";
 import {
   assertGymQrToken,
@@ -507,6 +508,7 @@ router.get(
   requireCap("attendance.view"),
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
+    await autoCheckoutDueAttendance({ gymId });
     const filter = { gymId: new Types.ObjectId(gymId) };
     // Date-only bounds need explicit handling: new Date("2026-10-22") is UTC
     // midnight, which silently drops the whole "to" day (22 Oct visits land

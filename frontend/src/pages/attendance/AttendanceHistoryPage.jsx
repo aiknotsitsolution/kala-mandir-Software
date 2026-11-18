@@ -79,7 +79,11 @@ export function AttendanceHistoryContent() {
     const searchSettled = search.trim() === debouncedSearch.trim();
     const rangeValid = from.length > 0 && to.length > 0 && from <= to;
     const query = useMemo(() => ({ from, to, status, page, pageSize: PAGE_SIZE, search: debouncedSearch.trim() }), [from, to, status, page, debouncedSearch]);
-    const list = useAsync(() => data.listAttendance(query), [data, query], { enabled: rangeValid });
+    const list = useAsync(() => data.listAttendance(query), [data, query], {
+        enabled: rangeValid,
+        pollingInterval: 60_000,
+        skipPollingIfUnfocused: true,
+    });
     /* Live refresh — a fresh studio QR check-in appears in history without a
        manual refresh (throttled bursts make it one reload, not five). */
     const lastLiveReloadRef = useRef(0);

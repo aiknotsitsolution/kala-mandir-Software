@@ -19,6 +19,7 @@ import { ymdInTz, parseDateOnly } from "../lib/dates.js";
 import { checkEligibility } from "../lib/membership.js";
 import { toAttendance, ymd } from "../lib/serialize.js";
 import { writeAudit } from "../lib/audit.js";
+import { autoCheckoutDueAttendance } from "./autoCheckout.js";
 
 export const REJECTION_MESSAGES = {
   invalid_qr: "This QR code is not recognised.",
@@ -78,6 +79,7 @@ export async function runCheckIn({ gymId, actorId, lookup, method = "qr", notes 
   const { settings, tz } = ctx;
   const now = new Date();
   const today = parseDateOnly(ymdInTz(now, tz));
+  await autoCheckoutDueAttendance({ gymId, now });
 
   return withTransaction(async (session) => {
     // 1. Resolve member by opaque token or member code.

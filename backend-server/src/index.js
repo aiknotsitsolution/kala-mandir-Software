@@ -20,6 +20,29 @@ import slotRoutes from "./routes/slots.js";
 import notificationRoutes from "./routes/notifications.js";
 import auditRoutes from "./routes/audit.js";
 import uploadRoutes from "./routes/uploads.js";
+import { autoCheckoutDueAttendance } from "./services/autoCheckout.js";
+
+const AUTO_CHECKOUT_INTERVAL_MS = 60_000;
+
+function startAutoCheckoutJob() {
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const count = await autoCheckoutDueAttendance();
+      if (count > 0) console.info(`Automatically checked out ${count} attendance record(s).`);
+    } catch (error) {
+      console.error("Automatic attendance check-out failed:", error);
+    } finally {
+      running = false;
+    }
+  };
+
+  void run();
+  const timer = setInterval(run, AUTO_CHECKOUT_INTERVAL_MS);
+  timer.unref();
+}
 
 export function buildApp() {
   const app = express();
@@ -150,6 +173,7 @@ export function buildApp() {
 
 async function main() {
   await connectDb();
+  startAutoCheckoutJob();
   const app = buildApp();
   app.listen(config.port, () => {
     // eslint-disable-next-line no-console

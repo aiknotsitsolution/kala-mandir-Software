@@ -46,6 +46,12 @@ describe("AttendancePage tabs and data loading", () => {
                 startTime: "09:00",
                 endTime: "10:00",
                 weekdays: [new Date().getDay()],
+            }, {
+                id: "slot2",
+                isActive: true,
+                startTime: "18:00",
+                endTime: "19:00",
+                weekdays: [new Date().getDay()],
             }]),
             listAllMembers: vi.fn(async () => [
                 { id: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", status: "active" },
@@ -113,6 +119,38 @@ describe("AttendancePage tabs and data loading", () => {
 
         expect(screen.getByText("Riya Shah")).toBeInTheDocument();
         expect(screen.queryByText("Asha Kapoor")).not.toBeInTheDocument();
+    });
+
+    it("loads every active slot when the Slot filter is set to All", async () => {
+        const user = userEvent.setup();
+        renderPage("/attendance?tab=mark");
+
+        expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
+        await user.selectOptions(screen.getByRole("combobox", { name: "Slot" }), "all");
+
+        await waitFor(() => expect(mockData.getClassRoster).toHaveBeenCalledTimes(3));
+        expect(mockData.getClassRoster).toHaveBeenCalledWith("slot1", expect.any(String));
+        expect(mockData.getClassRoster).toHaveBeenCalledWith("slot2", expect.any(String));
+    });
+
+    it("paginates the Mark Attendance roster", async () => {
+        const user = userEvent.setup();
+        mockData.getClassRoster = vi.fn(async () => ({
+            students: Array.from({ length: 25 }, (_, index) => ({
+                memberId: `m${index + 1}`,
+                fullName: `Student ${index + 1}`,
+                memberCode: `KM-${String(index + 1).padStart(3, "0")}`,
+                enrolled: true,
+            })),
+        }));
+        renderPage("/attendance?tab=mark");
+
+        expect(await screen.findByText("Student 1")).toBeInTheDocument();
+        expect(screen.queryByText("Student 21")).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Next students" }));
+
+        expect(screen.getByText("Student 21")).toBeInTheDocument();
+        expect(screen.queryByText("Student 1")).not.toBeInTheDocument();
     });
 
     it("searches attendance history and exports only matching records to CSV", async () => {

@@ -129,7 +129,10 @@ export function ViewAttendancePage({ hideHeader = false }) {
         page,
         pageSize: PAGE_SIZE,
     }), [range, status, page]);
-    const list = useAsync(() => data.listAttendance(query), [data, query]);
+    const list = useAsync(() => data.listAttendance(query), [data, query], {
+        pollingInterval: 60_000,
+        skipPollingIfUnfocused: true,
+    });
     const summary = useAsync(() => data.getAttendanceSummary(range), [data, range]);
     // Members who passed their planned daily hours — the "time up" strip.
     const overtime = useAsync(() => data.getAttendanceOvertime(query.from, query.to), [data, query.from, query.to]);
