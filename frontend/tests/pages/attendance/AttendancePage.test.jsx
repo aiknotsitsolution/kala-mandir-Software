@@ -29,7 +29,13 @@ describe("AttendancePage tabs and data loading", () => {
         store.dispatch(queryApi.util.resetApiState());
         Object.assign(mockData, {
             getClassDaySummary: vi.fn(async () => ({})),
-            listClassSlots: vi.fn(async () => []),
+            listClassSlots: vi.fn(async () => [{
+                id: "slot1",
+                isActive: true,
+                startTime: "09:00",
+                endTime: "10:00",
+                weekdays: [new Date().getDay()],
+            }]),
             listAllMembers: vi.fn(async () => [
                 { id: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", status: "active" },
                 { id: "m2", fullName: "Riya Shah", memberCode: "KM-002", status: "active" },
@@ -41,7 +47,12 @@ describe("AttendancePage tabs and data loading", () => {
                 page: 1,
                 pageSize: 100,
             })),
-            getClassRoster: vi.fn(async () => ({ students: [] })),
+            getClassRoster: vi.fn(async () => ({
+                students: [
+                    { memberId: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", enrolled: true, attendanceStatus: "present" },
+                    { memberId: "m2", fullName: "Riya Shah", memberCode: "KM-002", enrolled: false, attendanceStatus: "absent" },
+                ],
+            })),
         });
     });
 
@@ -72,5 +83,13 @@ describe("AttendancePage tabs and data loading", () => {
         await user.click(screen.getByRole("tab", { name: /View Attendance/ }));
         expect(screen.getByRole("tab", { name: /View Attendance/ })).toHaveAttribute("aria-selected", "true");
         await waitFor(() => expect(mockData.listAttendance).toHaveBeenCalledTimes(2));
+    });
+
+    it("shows attendance for students outside the selected slot roster", async () => {
+        renderPage("/attendance?tab=mark");
+
+        expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
+        expect(screen.getByText("Riya Shah")).toBeInTheDocument();
+        expect(screen.getAllByRole("button", { name: "Edit attendance for Riya Shah" })).toHaveLength(2);
     });
 });

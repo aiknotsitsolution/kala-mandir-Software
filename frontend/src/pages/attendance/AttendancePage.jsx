@@ -427,14 +427,10 @@ export function AttendancePage() {
         setEditingId(null);
     }, [roster.data]);
 
-    // Only students actually ENROLLED in one of the selected slots — the
-    // backend returns the full studio roster for every slot, so without this
-    // filter a group/"Load All" pick drags evening/other-batch students into
-    // a morning roster. Filtering here (not at display) also keeps walk-in
-    // search honest: an evening kid typed into the search shows up as a
-    // walk-in instead of echoing a hidden roster row.
-    const students = useMemo(() => (roster.data?.students ?? []).filter((s) => s.enrolled), [roster.data]);
-    // Filter the loaded roster by student name or ID.
+    // The roster endpoint returns every active studio member for the selected
+    // slot, including existing marks for students who are not enrolled in it.
+    const students = useMemo(() => roster.data?.students ?? [], [roster.data]);
+    // Filter the full roster by student name or ID.
     const filteredStudents = useMemo(() => {
         const q = studentQuery.trim().toLowerCase();
         if (!q) return students;
