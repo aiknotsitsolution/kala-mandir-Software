@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import authReducer, { authCheckFailed, authCheckStarted, authSessionChanged } from "./authSlice";
+import authReducer, { authCheckFailed, authCheckStarted, authSessionChanged } from "@/store/authSlice";
 
 describe("auth reducer", () => {
     it("clears an existing session when session verification fails", () => {

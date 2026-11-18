@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PlansPage } from "./PlansPage";
+import { PlansPage } from "@/pages/plans/PlansPage";
 import { queryApi } from "@/data/api/queryApi";
 import { store } from "@/store";
 

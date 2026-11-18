@@ -66,9 +66,20 @@ export function useAsync(fn, deps, options) {
         trigger(key);
     }, [enabled, key, trigger]);
     const error = query.error?.error ?? query.error?.data?.message ?? null;
+    const loading = enabled && (query.isUninitialized || query.isFetching);
+    const status = !enabled && query.isUninitialized
+        ? "idle"
+        : loading
+            ? "loading"
+            : query.isError
+                ? "failed"
+                : query.currentData !== undefined
+                    ? "succeeded"
+                    : "idle";
     return {
         data: query.currentData ?? null,
-        loading: enabled && (query.isUninitialized || query.isFetching),
+        status,
+        loading,
         error,
         reload,
     };
