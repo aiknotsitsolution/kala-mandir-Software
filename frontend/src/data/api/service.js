@@ -202,7 +202,8 @@ export class ApiDataService {
             page: query.page,
             pageSize: query.pageSize,
         });
-        return this.decoratePaginatedMembers(payload);
+        const page = await this.decoratePaginatedMembers(payload);
+        return { ...page, statusCounts: payload?.statusCounts ?? null };
     }
     async listAllMembers() {
         const out = [];

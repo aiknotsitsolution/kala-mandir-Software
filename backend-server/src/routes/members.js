@@ -282,27 +282,6 @@ router.get(
       );
     }
 
-    switch (req.query.status)
-    {
-      case "active":
-        rows = rows.filter((m) => m.effectiveStatus === "active");
-        break;
-      case "expiring_soon":
-        rows = rows.filter((m) => m.effectiveStatus === "expiring_soon");
-        break;
-      case "expired":
-        rows = rows.filter((m) => m.effectiveStatus === "expired");
-        break;
-      case "suspended":
-        rows = rows.filter((m) => m.effectiveStatus === "suspended");
-        break;
-      case "inactive":
-        rows = rows.filter((m) => m.effectiveStatus === "inactive" || m.status === "inactive");
-        break;
-      default:
-        break;
-    }
-
     if (req.query.planId)
     {
       const planId = String(req.query.planId);
@@ -323,6 +302,44 @@ router.get(
     {
       const tagId = String(req.query.tagId);
       rows = rows.filter((m) => (m.tagIds ?? []).some((id) => String(id) === tagId));
+    }
+
+    const statusCounts = {
+      all: rows.length,
+      active: 0,
+      expiring_soon: 0,
+      expired: 0,
+      suspended: 0,
+      inactive: 0,
+    };
+    for (const member of rows)
+    {
+      if (member.effectiveStatus === "active") statusCounts.active += 1;
+      else if (member.effectiveStatus === "expiring_soon") statusCounts.expiring_soon += 1;
+      else if (member.effectiveStatus === "expired") statusCounts.expired += 1;
+      else if (member.effectiveStatus === "suspended") statusCounts.suspended += 1;
+      else if (member.effectiveStatus === "inactive" || member.status === "inactive") statusCounts.inactive += 1;
+    }
+
+    switch (req.query.status)
+    {
+      case "active":
+        rows = rows.filter((m) => m.effectiveStatus === "active");
+        break;
+      case "expiring_soon":
+        rows = rows.filter((m) => m.effectiveStatus === "expiring_soon");
+        break;
+      case "expired":
+        rows = rows.filter((m) => m.effectiveStatus === "expired");
+        break;
+      case "suspended":
+        rows = rows.filter((m) => m.effectiveStatus === "suspended");
+        break;
+      case "inactive":
+        rows = rows.filter((m) => m.effectiveStatus === "inactive" || m.status === "inactive");
+        break;
+      default:
+        break;
     }
 
     const dir = req.query.dir === "asc" ? 1 : -1;
@@ -347,7 +364,7 @@ router.get(
     const start = (page - 1) * pageSize;
     const items = rows.slice(start, start + pageSize);
     await attachQuotaToRows(items);
-    res.json({ items, total: rows.length, page, pageSize });
+    res.json({ items, total: rows.length, page, pageSize, statusCounts });
   }),
 );
 

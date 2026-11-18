@@ -181,6 +181,21 @@ describe("AttendancePage tabs and data loading", () => {
         expect(studentRegister.queryByText("Student 01")).not.toBeInTheDocument();
     });
 
+    it("filters the View All register in place when a status card is clicked", async () => {
+        const user = userEvent.setup();
+        renderPage();
+
+        expect(await screen.findByText("Riya Shah")).toBeInTheDocument();
+        const studentRegister = within(screen.getByText("Student register").closest('[data-slot="card"]'));
+        const presentCard = screen.getByRole("button", { name: "Show present attendance" });
+        await user.click(presentCard);
+
+        expect(presentCard).toHaveAttribute("aria-pressed", "true");
+        expect(studentRegister.getByText("Asha Kapoor")).toBeInTheDocument();
+        expect(studentRegister.queryByText("Riya Shah")).not.toBeInTheDocument();
+        expect(studentRegister.getByText("Showing present students")).toBeInTheDocument();
+    });
+
     it("paginates the View Attendance register", async () => {
         const user = userEvent.setup();
         const records = Array.from({ length: 25 }, (_, index) => ({

@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, Trash2Icon, UserCheckIcon, UserRoundPlusIcon, UserXIcon, UsersIcon, } from "lucide-react";
+import { CalendarClockIcon, ChevronLeftIcon, ChevronRightIcon, EyeIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, ShieldAlertIcon, Trash2Icon, UserCheckIcon, UserRoundPlusIcon, UserRoundXIcon, UserXIcon, UsersIcon, } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { EmptyState, ErrorState, SearchEmptyState, TableSkeleton, Stagger } from "@/components/shared/States";
+import { EmptyState, ErrorState, SearchEmptyState, Skeleton, TableSkeleton, Stagger } from "@/components/shared/States";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { SmartImage } from "@/components/shared/SmartImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table";
 import { useAuth, useData } from "@/auth/AuthProvider";
 import { useAsync, useDebounced } from "@/hooks";
-import { MEMBER_FILTER_LABELS, PAYMENT_METHOD_LABELS, formatDate } from "@/lib/format";
+import { MEMBER_FILTER_LABELS, PAYMENT_METHOD_LABELS, formatDate, formatNumberIN } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { MemberFormDialog } from "./MemberFormDialog";
@@ -28,6 +28,14 @@ const STATUS_FILTERS = [
     "expired",
     "suspended",
     "inactive",
+];
+const STATUS_CARDS = [
+    { value: "all", label: "All students", icon: UsersIcon, tone: "text-primary", iconTone: "bg-primary/10" },
+    { value: "active", label: "Active", icon: UserCheckIcon, tone: "text-success", iconTone: "bg-success/10" },
+    { value: "expiring_soon", label: "Expiring soon", icon: CalendarClockIcon, tone: "text-warning", iconTone: "bg-warning/10" },
+    { value: "expired", label: "Expired", icon: UserXIcon, tone: "text-destructive", iconTone: "bg-destructive/10" },
+    { value: "suspended", label: "Suspended", icon: ShieldAlertIcon, tone: "text-orange-500", iconTone: "bg-orange-500/10" },
+    { value: "inactive", label: "Inactive", icon: UserRoundXIcon, tone: "text-muted-foreground", iconTone: "bg-muted" },
 ];
 /** "kitni class hui / bachi" — attended vs paid quota, shown as a compact stack.
  *  Colour rule: 4+ left green · 2–3 yellow · 1 or 0 red. */
@@ -197,6 +205,48 @@ export function MembersPage() {
     const header = (<PageHeader title="Students" description="Your student directory — memberships, QR cards and payment history in one place."/>);
     return (<div className="space-y-6">
       {header}
+
+      {members.error ? null : members.loading && !members.data ? (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6" aria-label="Loading student status cards">
+          {STATUS_CARDS.map((card) => <div key={card.value} className="rounded-xl border border-border/70 p-4"><div className="flex items-center justify-between"><Skeleton className="h-4 w-20"/><Skeleton className="size-9 rounded-lg"/></div><Skeleton className="mt-4 h-7 w-14"/></div>)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6" aria-label="Filter students by status">
+          {STATUS_CARDS.map((card) => {
+            const Icon = card.icon;
+            const count = members.data?.statusCounts?.[card.value] ?? 0;
+            const selected = status === card.value;
+            return (
+              <button
+                key={card.value}
+                type="button"
+                aria-label={`Filter students by ${card.label}`}
+                aria-pressed={selected}
+                onClick={() => {
+                  setStatus(card.value);
+                  setPage(1);
+                }}
+                className="rounded-xl text-left outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <Card className={cn("h-full gap-0 border-border/70 py-0 transition-colors hover:border-primary/35", selected && "border-primary/45 bg-primary/[0.04] ring-1 ring-primary/20")}>
+                  <CardContent className="flex min-h-28 flex-col justify-between gap-3 p-3.5 sm:p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 truncate text-xs font-medium text-muted-foreground sm:text-sm">{card.label}</p>
+                      <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", card.iconTone, card.tone)}>
+                        <Icon className="size-4"/>
+                      </span>
+                    </div>
+                    <div className="flex items-end justify-between gap-2">
+                      <p className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatNumberIN(count)}</p>
+                      <span className={cn("mb-1 size-1.5 shrink-0 rounded-full", selected ? "bg-primary" : "bg-transparent")}/>
+                    </div>
+                  </CardContent>
+                </Card>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Toolbar — search and filters in one card, matching the plans page. */}
       <div className="flex flex-col gap-3 rounded-xl border border-km-gold/25 bg-card/70 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4">

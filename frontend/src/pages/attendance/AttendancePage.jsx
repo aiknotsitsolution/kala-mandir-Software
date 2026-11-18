@@ -246,6 +246,31 @@ function StatCard({ label, value, icon, tone }) {
     </Card>);
 }
 
+function AttendanceFilterCard({ label, value, hint, icon, tone, active, onClick }) {
+    const tones = {
+        neutral: "bg-primary/10 text-primary",
+        present: "bg-success/10 text-success",
+        absent: "bg-destructive/10 text-destructive",
+        rate: "bg-info/10 text-info",
+    };
+    return (
+      <button type="button" aria-label={`Show ${label.toLowerCase()} attendance`} aria-pressed={active} onClick={onClick} className="h-full rounded-xl text-left outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        <Card className={cn("graphite-surface h-full gap-0 border-border/70 py-0 transition-colors hover:border-primary/35", active && "border-primary/45 ring-1 ring-primary/20")}>
+          <CardContent className="flex min-h-28 items-center justify-between gap-3 p-3.5 sm:p-4">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{value}</p>
+              <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">{hint}</p>
+            </div>
+            <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", tones[tone] ?? tones.neutral)}>
+              {icon}
+            </span>
+          </CardContent>
+        </Card>
+      </button>
+    );
+}
+
 const ymdOf = (d) => format(d, "yyyy-MM-dd");
 
 async function listAllAttendance(data, range) {
@@ -598,6 +623,7 @@ export function AttendancePage() {
 
     /* --------- View All: attendance by day — one date chip, no filters ------- */
     const [viewAllDate, setViewAllDate] = useState(() => ymdOf(new Date()));
+    const [viewAllStatusFilter, setViewAllStatusFilter] = useState("all");
     const [viewAllPage, setViewAllPage] = useState(1);
     const viewAllRange = useMemo(() => {
         const [y, m, d] = viewAllDate.split("-").map(Number);
@@ -648,11 +674,20 @@ export function AttendancePage() {
                 .filter((status) => status.count > 0),
         };
     }, [viewAllRows]);
+    const filteredViewAllRows = useMemo(() => {
+        if (viewAllStatusFilter === "present")
+            return viewAllRows.filter((row) => row.attendanceStatus === "present" || row.attendanceStatus === "late");
+        if (viewAllStatusFilter === "absent")
+            return viewAllRows.filter((row) => row.attendanceStatus === "absent");
+        if (viewAllStatusFilter === "marked")
+            return viewAllRows.filter((row) => Boolean(row.attendanceStatus));
+        return viewAllRows;
+    }, [viewAllRows, viewAllStatusFilter]);
     const viewAllLoading = viewAllMembers.loading || viewAllList.loading;
     const viewAllError = viewAllMembers.error ?? viewAllList.error;
     const viewAllLabel = format(new Date(`${viewAllDate}T00:00:00`), "EEE, d MMM yyyy");
-    const viewAllTotalPages = Math.max(1, Math.ceil(viewAllRows.length / ATTENDANCE_PAGE_SIZE));
-    const visibleViewAllRows = viewAllRows.slice(
+    const viewAllTotalPages = Math.max(1, Math.ceil(filteredViewAllRows.length / ATTENDANCE_PAGE_SIZE));
+    const visibleViewAllRows = filteredViewAllRows.slice(
         (viewAllPage - 1) * ATTENDANCE_PAGE_SIZE,
         viewAllPage * ATTENDANCE_PAGE_SIZE,
     );
@@ -1289,10 +1324,54 @@ export function AttendancePage() {
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                  <StatCard label="Active Students" value={viewAllRows.length} icon={<UsersIcon className="size-4"/>} tone="neutral"/>
-                  <StatCard label="Present" value={viewAllStats.counts.present + viewAllStats.counts.late} icon={<CheckCircle2Icon className="size-4"/>} tone="present"/>
-                  <StatCard label="Absent" value={viewAllStats.counts.absent} icon={<XCircleIcon className="size-4"/>} tone="absent"/>
-                  <StatCard label="Marked" value={`${viewAllStats.completion}%`} icon={<GaugeIcon className="size-4"/>} tone="rate"/>
+                  <AttendanceFilterCard
+                    label="Active Students"
+                    value={viewAllRows.length}
+                    hint="Show everyone"
+                    icon={<UsersIcon className="size-5"/>}
+                    tone="neutral"
+                    active={viewAllStatusFilter === "all"}
+                    onClick={() => {
+                      setViewAllStatusFilter("all");
+                      setViewAllPage(1);
+                    }}
+                  />
+                  <AttendanceFilterCard
+                    label="Present"
+                    value={viewAllStats.counts.present + viewAllStats.counts.late}
+                    hint="Present and late"
+                    icon={<CheckCircle2Icon className="size-5"/>}
+                    tone="present"
+                    active={viewAllStatusFilter === "present"}
+                    onClick={() => {
+                      setViewAllStatusFilter("present");
+                      setViewAllPage(1);
+                    }}
+                  />
+                  <AttendanceFilterCard
+                    label="Absent"
+                    value={viewAllStats.counts.absent}
+                    hint="Students marked absent"
+                    icon={<XCircleIcon className="size-5"/>}
+                    tone="absent"
+                    active={viewAllStatusFilter === "absent"}
+                    onClick={() => {
+                      setViewAllStatusFilter("absent");
+                      setViewAllPage(1);
+                    }}
+                  />
+                  <AttendanceFilterCard
+                    label="Marked"
+                    value={`${viewAllStats.completion}%`}
+                    hint="Show all marked students"
+                    icon={<GaugeIcon className="size-5"/>}
+                    tone="rate"
+                    active={viewAllStatusFilter === "marked"}
+                    onClick={() => {
+                      setViewAllStatusFilter("marked");
+                      setViewAllPage(1);
+                    }}
+                  />
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-3">
@@ -1361,40 +1440,50 @@ export function AttendancePage() {
                   <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
                     <div className="space-y-1">
                       <CardTitle className="text-base">Student register</CardTitle>
-                      <p className="text-xs text-muted-foreground">Attendance status for every active student</p>
+                      <p className="text-xs text-muted-foreground">
+                        {viewAllStatusFilter === "all"
+                          ? "Attendance status for every active student"
+                          : `Showing ${viewAllStatusFilter === "present" ? "present" : viewAllStatusFilter} students`}
+                      </p>
                     </div>
-                    <Badge variant="secondary" className="shrink-0 tabular-nums">{viewAllRows.length} students</Badge>
+                    <Badge variant="secondary" className="shrink-0 tabular-nums">{filteredViewAllRows.length} students</Badge>
                   </CardHeader>
                   <CardContent className="p-3 sm:p-4">
-                    <ul className="space-y-2 sm:space-y-0 sm:divide-y sm:divide-border/60">
-                      {visibleViewAllRows.map((row) => (<li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:rounded-none sm:border-0 sm:px-2 sm:py-3 sm:shadow-none">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <SmartImage src={row.memberPhoto} name={row.memberName ?? "Student"} className="size-9 shrink-0"/>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{row.memberName ?? "Student"}</p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {row.memberCode ?? "—"}
-                              {slotTimeOf(row) ? ` · ${slotTimeOf(row)}` : ""}
-                            </p>
+                    {filteredViewAllRows.length === 0 ? (
+                      <EmptyState title="No students in this status" description="Choose another status card to see students." />
+                    ) : (
+                      <>
+                        <ul className="space-y-2 sm:space-y-0 sm:divide-y sm:divide-border/60">
+                          {visibleViewAllRows.map((row) => (<li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:rounded-none sm:border-0 sm:px-2 sm:py-3 sm:shadow-none">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <SmartImage src={row.memberPhoto} name={row.memberName ?? "Student"} className="size-9 shrink-0"/>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">{row.memberName ?? "Student"}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {row.memberCode ?? "—"}
+                                  {slotTimeOf(row) ? ` · ${slotTimeOf(row)}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <StatusChip status={row.attendanceStatus}/>
+                          </li>))}
+                        </ul>
+                        <div className="mt-3 flex flex-col gap-3 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs text-muted-foreground">
+                            Showing {(viewAllPage - 1) * ATTENDANCE_PAGE_SIZE + 1}–{Math.min(viewAllPage * ATTENDANCE_PAGE_SIZE, filteredViewAllRows.length)} of {filteredViewAllRows.length} students
+                          </p>
+                          <div className="flex items-center justify-between gap-2 sm:justify-end">
+                            <Button size="sm" variant="outline" aria-label="Previous View All page" disabled={viewAllPage <= 1} onClick={() => setViewAllPage((page) => Math.max(1, page - 1))}>
+                              <ChevronLeftIcon/> Previous
+                            </Button>
+                            <span className="text-xs text-muted-foreground tabular-nums">Page {viewAllPage} of {viewAllTotalPages}</span>
+                            <Button size="sm" variant="outline" aria-label="Next View All page" disabled={viewAllPage >= viewAllTotalPages} onClick={() => setViewAllPage((page) => Math.min(viewAllTotalPages, page + 1))}>
+                              Next <ChevronRightIcon/>
+                            </Button>
                           </div>
                         </div>
-                        <StatusChip status={row.attendanceStatus}/>
-                      </li>))}
-                    </ul>
-                    <div className="mt-3 flex flex-col gap-3 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-muted-foreground">
-                        Showing {(viewAllPage - 1) * ATTENDANCE_PAGE_SIZE + 1}–{Math.min(viewAllPage * ATTENDANCE_PAGE_SIZE, viewAllRows.length)} of {viewAllRows.length} students
-                      </p>
-                      <div className="flex items-center justify-between gap-2 sm:justify-end">
-                        <Button size="sm" variant="outline" aria-label="Previous View All page" disabled={viewAllPage <= 1} onClick={() => setViewAllPage((page) => Math.max(1, page - 1))}>
-                          <ChevronLeftIcon/> Previous
-                        </Button>
-                        <span className="text-xs text-muted-foreground tabular-nums">Page {viewAllPage} of {viewAllTotalPages}</span>
-                        <Button size="sm" variant="outline" aria-label="Next View All page" disabled={viewAllPage >= viewAllTotalPages} onClick={() => setViewAllPage((page) => Math.min(viewAllTotalPages, page + 1))}>
-                          Next <ChevronRightIcon/>
-                        </Button>
-                      </div>
-                    </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </>
