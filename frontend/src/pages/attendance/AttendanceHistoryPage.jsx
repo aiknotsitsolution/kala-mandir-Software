@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, Loader2Icon, PencilIcon, SearchIcon, } from "lucide-react";
+import { ActivityIcon, CalendarCheckIcon, CheckCircle2Icon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, Loader2Icon, LogOutIcon, PencilIcon, SearchIcon, } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { subscribeLiveNotification } from "@/lib/liveBus";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/States";
 import { SmartImage } from "@/components/shared/SmartImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table";
 import { useAuth, useData } from "@/auth/AuthProvider";
 import { useAsync, useDebounced } from "@/hooks";
@@ -111,6 +113,9 @@ export function AttendanceHistoryContent() {
     };
     const items = list.data?.items ?? [];
     const total = list.data?.total ?? 0;
+    const analytics = list.data?.analytics;
+    const summary = analytics?.summary;
+    const trend = analytics?.trend ?? [];
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const firstRow = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
     const lastRow = Math.min(page * PAGE_SIZE, total);
@@ -238,8 +243,75 @@ export function AttendanceHistoryContent() {
         </CardContent>
       </Card>
 
+      <section aria-label="Attendance overview" className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+              { label: "Total visits", value: summary?.totalVisits, hint: "Matching your filters", icon: <ActivityIcon />, tone: "text-primary" },
+              { label: "Checked in", value: summary?.checkedIn, hint: "Currently in the studio", icon: <CheckCircle2Icon />, tone: "text-emerald-500" },
+              { label: "Checked out", value: summary?.checkedOut, hint: "Completed visits", icon: <LogOutIcon />, tone: "text-sky-500" },
+          ].map((stat) => (
+            <Card key={stat.label} className="graphite-surface gap-0 overflow-hidden border-border/70 py-0 transition-colors hover:border-primary/30">
+              <CardContent className="flex items-center justify-between gap-4 p-4 sm:p-5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+                  {loading ? <Skeleton className="mt-2 h-8 w-20" /> : <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{formatNumberIN(stat.value ?? 0)}</p>}
+                  <p className="mt-1 text-xs text-muted-foreground">{stat.hint}</p>
+                </div>
+                <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted/70", stat.tone)}>
+                  {stat.icon}
+                </span>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="graphite-surface gap-0 border-border/70">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-2">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Attendance trend</CardTitle>
+              <p className="text-xs text-muted-foreground">Daily visits for the selected filters</p>
+            </div>
+            <span className="rounded-lg bg-primary/10 p-2 text-primary"><CalendarCheckIcon className="size-4" /></span>
+          </CardHeader>
+          <CardContent className="h-64 pb-4 sm:h-72">
+            {loading ? <Skeleton className="size-full" /> : error ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Trend is unavailable while attendance is loading.</div>
+            ) : trend.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="attendanceHistoryFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="date" tickFormatter={(value) => value.slice(5)} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} minTickGap={18} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "0.75rem", color: "var(--foreground)" }} labelStyle={{ color: "var(--muted-foreground)" }} />
+                  <Area type="monotone" dataKey="visits" name="Visits" stroke="var(--chart-1)" strokeWidth={2} fill="url(#attendanceHistoryFill)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground"><ActivityIcon className="size-5" /></span>
+                <p className="text-sm font-medium">No attendance to chart</p>
+                <p className="text-xs text-muted-foreground">Try a wider date range or different filters.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
       {/* Records */}
       <Card className="graphite-surface gap-0 border-border/70">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
+          <div className="space-y-1">
+            <CardTitle className="text-base">Attendance records</CardTitle>
+            <p className="text-xs text-muted-foreground">Search, review, and export visit details</p>
+          </div>
+          <Badge variant="secondary" className="shrink-0 tabular-nums">{formatNumberIN(total)} {total === 1 ? "visit" : "visits"}</Badge>
+        </CardHeader>
         {loading ? (<CardContent>
             <TableSkeleton rows={6} cols={9}/>
           </CardContent>) : !rangeValid ? (<CardContent>

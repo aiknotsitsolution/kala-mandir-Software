@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import {
     CalendarIcon,
+    ActivityIcon,
     CheckCircle2Icon,
     CheckIcon,
     ChevronDownIcon,
@@ -17,20 +18,22 @@ import {
     Loader2Icon,
     ListIcon,
     PencilIcon,
+    PieChartIcon,
     SaveIcon,
     SearchIcon,
     UsersIcon,
     XCircleIcon,
     XIcon,
 } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SmartImage } from "@/components/shared/SmartImage";
-import { ErrorState } from "@/components/shared/States";
+import { EmptyState, ErrorState, Skeleton } from "@/components/shared/States";
 import { useAuth, useData } from "@/auth/AuthProvider";
 import { useAsync, useDebounced } from "@/hooks";
 import { subscribeLiveNotification } from "@/lib/liveBus";
@@ -52,6 +55,14 @@ const STATUS_META = {
 };
 const STATUS_ORDER = ["present", "absent", "leave", "holiday"];
 const MARK_PAGE_SIZE = 20;
+const VIEW_ALL_STATUS_META = [
+    { key: "present", label: "Present", color: "var(--chart-1)" },
+    { key: "late", label: "Late", color: "var(--chart-2)" },
+    { key: "absent", label: "Absent", color: "var(--destructive)" },
+    { key: "leave", label: "Leave", color: "var(--chart-3)" },
+    { key: "holiday", label: "Holiday", color: "var(--chart-4)" },
+    { key: "unmarked", label: "Not marked", color: "var(--muted-foreground)" },
+];
 
 function StatusChip({ status }) {
     const meta = STATUS_META[status];
@@ -616,6 +627,24 @@ export function AttendancePage() {
             })
             .sort((a, b) => a.memberName.localeCompare(b.memberName));
     }, [viewAllMembers.data, viewAllList.data]);
+    const viewAllStats = useMemo(() => {
+        const counts = Object.fromEntries(VIEW_ALL_STATUS_META.map(({ key }) => [key, 0]));
+        for (const row of viewAllRows) {
+            const status = VIEW_ALL_STATUS_META.some(({ key }) => key === row.attendanceStatus)
+                ? row.attendanceStatus
+                : "unmarked";
+            counts[status] += 1;
+        }
+        const marked = viewAllRows.length - counts.unmarked;
+        return {
+            counts,
+            marked,
+            completion: viewAllRows.length ? Math.round((marked / viewAllRows.length) * 100) : 0,
+            pieData: VIEW_ALL_STATUS_META
+                .map((status) => ({ ...status, count: counts[status.key] }))
+                .filter((status) => status.count > 0),
+        };
+    }, [viewAllRows]);
     const viewAllLoading = viewAllMembers.loading || viewAllList.loading;
     const viewAllError = viewAllMembers.error ?? viewAllList.error;
     const viewAllLabel = format(new Date(`${viewAllDate}T00:00:00`), "EEE, d MMM yyyy");
@@ -1163,45 +1192,150 @@ export function AttendancePage() {
 
       {/* ------- View All: aaj ki attendance — no filters, one date chip ------- */}
       <TabsContent value="all">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="relative inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-secondary/70" title="Change date">
-              <CalendarIcon className="size-3.5 text-muted-foreground"/>
-              {viewAllLabel}
-              <input
-                type="date"
-                aria-label="Attendance date"
-                value={viewAllDate}
-                onChange={(e) => { if (e.target.value) setViewAllDate(e.target.value); }}
-                onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* older browsers: fall back to focusing the input */ } }}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              />
-            </label>
-            <p className="text-xs text-muted-foreground">
-              {viewAllLoading ? "Loading students…" : `${viewAllRows.length} active students · unmarked students included`}
-            </p>
-          </div>
+        <div className="space-y-5">
+          <Card className="graphite-surface gap-0 overflow-hidden border-border/70">
+            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Daily attendance</p>
+                <h2 className="text-lg font-semibold tracking-tight sm:text-xl">{viewAllLabel}</h2>
+                <p className="text-sm text-muted-foreground">Every active student is included, whether marked or not.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1">
+                  <UsersIcon className="size-3.5" />
+                  {viewAllLoading ? "Loading…" : `${viewAllRows.length} active students`}
+                </Badge>
+                <label className="relative inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-2 text-sm font-medium transition-colors hover:border-primary/40 hover:bg-secondary" title="Change date">
+                  <CalendarIcon className="size-4 text-primary"/>
+                  <span>{viewAllLabel}</span>
+                  <input
+                    type="date"
+                    aria-label="Attendance date"
+                    value={viewAllDate}
+                    onChange={(e) => { if (e.target.value) setViewAllDate(e.target.value); }}
+                    onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* older browsers: focus the date field */ } }}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  />
+                </label>
+              </div>
+            </CardContent>
+          </Card>
+
           {viewAllError ? (<ErrorState message={viewAllError} onRetry={() => {
                 viewAllMembers.reload();
                 viewAllList.reload();
             }}/>)
-            : viewAllLoading ? (<p className="py-10 text-center text-sm text-muted-foreground">Loading attendance…</p>)
-            : viewAllRows.length === 0 ? (<p className="py-10 text-center text-sm text-muted-foreground">No active students found.</p>)
-            : (<ul className="space-y-2 sm:space-y-0 sm:rounded-xl sm:border sm:border-border/60 sm:divide-y sm:divide-border/60">
-                {viewAllRows.map((row) => (<li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:rounded-none sm:border-0 sm:px-4 sm:py-3 sm:shadow-none">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <SmartImage src={row.memberPhoto} name={row.memberName ?? "Student"} className="size-8 shrink-0"/>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{row.memberName ?? "Student"}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {row.memberCode ?? "—"}
-                        {slotTimeOf(row) ? ` · ${slotTimeOf(row)}` : ""}
-                      </p>
+            : viewAllLoading ? (
+              <>
+                <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+                  {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-24 rounded-xl" />)}
+                </div>
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <Skeleton className="h-80 rounded-xl lg:col-span-2" />
+                  <Skeleton className="h-80 rounded-xl" />
+                </div>
+              </>
+            ) : viewAllRows.length === 0 ? (
+              <EmptyState title="No active students found" description="Active student attendance will appear here." />
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                  <StatCard label="Active Students" value={viewAllRows.length} icon={<UsersIcon className="size-4"/>} tone="neutral"/>
+                  <StatCard label="Present" value={viewAllStats.counts.present + viewAllStats.counts.late} icon={<CheckCircle2Icon className="size-4"/>} tone="present"/>
+                  <StatCard label="Absent" value={viewAllStats.counts.absent} icon={<XCircleIcon className="size-4"/>} tone="absent"/>
+                  <StatCard label="Marked" value={`${viewAllStats.completion}%`} icon={<GaugeIcon className="size-4"/>} tone="rate"/>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <Card className="graphite-surface gap-0 border-border/70 lg:col-span-2">
+                    <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-2">
+                      <div className="space-y-1">
+                        <CardTitle className="text-base">Attendance by status</CardTitle>
+                        <p className="text-xs text-muted-foreground">Student count for {viewAllLabel}</p>
+                      </div>
+                      <span className="rounded-lg bg-primary/10 p-2 text-primary"><ActivityIcon className="size-4" /></span>
+                    </CardHeader>
+                    <CardContent className="h-64 pb-4 sm:h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={VIEW_ALL_STATUS_META.map((status) => ({ ...status, count: viewAllStats.counts[status.key] }))} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} interval={0} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={36} />
+                          <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "0.75rem", color: "var(--foreground)" }} />
+                          <Bar dataKey="count" name="Students" radius={[5, 5, 0, 0]} maxBarSize={38}>
+                            {VIEW_ALL_STATUS_META.map((status) => <Cell key={status.key} fill={status.color} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="graphite-surface gap-0 border-border/70">
+                    <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-2">
+                      <div className="space-y-1">
+                        <CardTitle className="text-base">Attendance split</CardTitle>
+                        <p className="text-xs text-muted-foreground">Marked status vs not marked</p>
+                      </div>
+                      <span className="rounded-lg bg-primary/10 p-2 text-primary"><PieChartIcon className="size-4" /></span>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative mx-auto h-52 max-w-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={viewAllStats.pieData} dataKey="count" nameKey="label" innerRadius={56} outerRadius={82} paddingAngle={3} stroke="none">
+                              {viewAllStats.pieData.map((status) => <Cell key={status.key} fill={status.color} />)}
+                            </Pie>
+                            <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "0.75rem", color: "var(--foreground)" }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                          <p className="text-2xl font-semibold tabular-nums">{viewAllRows.length}</p>
+                          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Students</p>
+                        </div>
+                      </div>
+                      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
+                        {viewAllStats.pieData.map((status) => (
+                          <li key={status.key} className="flex min-w-0 items-center justify-between gap-2 text-xs">
+                            <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: status.color }} />
+                              <span className="truncate">{status.label}</span>
+                            </span>
+                            <span className="font-medium tabular-nums">{status.count}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card className="graphite-surface gap-0 border-border/70">
+                  <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
+                    <div className="space-y-1">
+                      <CardTitle className="text-base">Student register</CardTitle>
+                      <p className="text-xs text-muted-foreground">Attendance status for every active student</p>
                     </div>
-                  </div>
-                  <StatusChip status={row.attendanceStatus}/>
-                </li>))}
-              </ul>)}
+                    <Badge variant="secondary" className="shrink-0 tabular-nums">{viewAllRows.length} students</Badge>
+                  </CardHeader>
+                  <CardContent className="p-3 sm:p-4">
+                    <ul className="space-y-2 sm:space-y-0 sm:divide-y sm:divide-border/60">
+                      {viewAllRows.map((row) => (<li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:rounded-none sm:border-0 sm:px-2 sm:py-3 sm:shadow-none">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <SmartImage src={row.memberPhoto} name={row.memberName ?? "Student"} className="size-9 shrink-0"/>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{row.memberName ?? "Student"}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {row.memberCode ?? "—"}
+                              {slotTimeOf(row) ? ` · ${slotTimeOf(row)}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <StatusChip status={row.attendanceStatus}/>
+                      </li>))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </>
+            )}
         </div>
       </TabsContent>
       </Tabs>

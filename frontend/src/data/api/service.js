@@ -315,7 +315,7 @@ export class ApiDataService {
             page: query.page,
             pageSize: query.pageSize,
         });
-        return this.paginatedOf(payload, 20);
+        return { ...this.paginatedOf(payload, 20), analytics: payload?.analytics ?? null };
     }
     async listMemberAttendance(memberId, limit = 30) {
         const rows = await apiGet(`/members/${encodeURIComponent(memberId)}/attendance`, { limit });

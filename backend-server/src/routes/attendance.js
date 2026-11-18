@@ -553,6 +553,7 @@ router.get(
       }
     }
 
+    const ctx = await loadGymContext(gymId);
     const page = intParam(req.query.page, 1);
     const pageSize = intParam(req.query.pageSize, 15, { min: 5, max: 100 });
     const [result] = await AttendanceRecord.aggregate([
@@ -562,13 +563,38 @@ router.get(
         $facet: {
           metadata: [{ $count: "total" }],
           items: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
+          summary: [
+            {
+              $group: {
+                _id: null,
+                totalVisits: { $sum: 1 },
+                checkedIn: { $sum: { $cond: [{ $eq: ["$status", "checked_in"] }, 1, 0] } },
+                checkedOut: { $sum: { $cond: [{ $eq: ["$status", "checked_out"] }, 1, 0] } },
+              },
+            },
+          ],
+          trend: [
+            {
+              $group: {
+                _id: {
+                  $dateToString: {
+                    format: "%Y-%m-%d",
+                    date: "$checkIn",
+                    timezone: ctx.tz,
+                  },
+                },
+                visits: { $sum: 1 },
+              },
+            },
+            { $sort: { _id: 1 } },
+            { $project: { _id: 0, date: "$_id", visits: 1 } },
+          ],
         },
       },
     ]);
     const rows = result?.items ?? [];
     const total = result?.metadata?.[0]?.total ?? 0;
 
-    const ctx = await loadGymContext(gymId);
     const memberIds = [...new Set(rows.map((r) => String(r.memberId)))];
     const scannerIds = [...new Set(rows.map((r) => r.scannerId).filter(Boolean).map(String))];
     const membershipIds = [...new Set(rows.map((r) => String(r.membershipId)).filter((v) => v && v !== "null" && v !== "undefined"))];
@@ -659,6 +685,10 @@ router.get(
       total,
       page,
       pageSize,
+      analytics: {
+        summary: result?.summary?.[0] ?? { totalVisits: 0, checkedIn: 0, checkedOut: 0 },
+        trend: result?.trend ?? [],
+      },
     });
   }),
 );
