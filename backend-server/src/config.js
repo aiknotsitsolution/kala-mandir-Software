@@ -12,7 +12,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 const config = {
   env: process.env.NODE_ENV ?? "development",
-  port: Number(process.env.PORT ?? 4000),
+  port: Number(process.env.PORT ?? 8000),
   mongoUri: process.env.MONGODB_URI ?? "",
   jwtSecret: process.env.JWT_SECRET ?? "kalamandir-dance-dev-secret",
   jwtExpiresIn: "7d",
