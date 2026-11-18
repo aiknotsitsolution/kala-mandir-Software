@@ -12,7 +12,7 @@ import SlotEnrollment from "../models/SlotEnrollment.js";
 import StaffProfile from "../models/StaffProfile.js";
 import { requireAuth, requireCap } from "../middleware/auth.js";
 import { asyncHandler, badRequest, notFound, forbidden } from "../lib/errors.js";
-import { parseBody, intParam } from "../middleware/validate.js";
+import { parseBody, intParam, escapeRegExp } from "../middleware/validate.js";
 import { toAttendance, toClassSlot } from "../lib/serialize.js";
 import { computeQuota } from "../lib/quota.js";
 import { currentMembership, daysRemaining } from "../lib/membership.js";
@@ -500,14 +500,14 @@ router.post(
 /*  Listing + reports                                                  */
 /* ------------------------------------------------------------------ */
 
-/** GET /api/attendance?from&to&memberId&status&page&pageSize → Paginated<AttendanceRecord> */
+/** GET /api/attendance?from&to&memberId&search&status&page&pageSize → Paginated<AttendanceRecord> */
 router.get(
   "/attendance",
   requireAuth,
   requireCap("attendance.view"),
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
-    const filter = { gymId };
+    const filter = { gymId: new Types.ObjectId(gymId) };
     // Date-only bounds need explicit handling: new Date("2026-10-22") is UTC
     // midnight, which silently drops the whole "to" day (22 Oct visits land
     // after 00:00 UTC). Date-only `to` spans the full day instead.
@@ -527,22 +527,44 @@ router.get(
       }
     }
     if (req.query.memberId && Types.ObjectId.isValid(String(req.query.memberId))) {
-      filter.memberId = req.query.memberId;
+      filter.memberId = new Types.ObjectId(String(req.query.memberId));
     }
     if (req.query.status === "checked_in" || req.query.status === "checked_out") {
       filter.status = req.query.status;
     }
+    const search = String(req.query.search ?? "").trim();
+    if (search.length > 100) throw badRequest("Search must be 100 characters or fewer.");
+    if (search) {
+      const rx = new RegExp(escapeRegExp(search), "i");
+      const members = await Member.find({
+        gymId,
+        $or: [{ fullName: rx }, { memberCode: rx }],
+      })
+        .select("_id")
+        .lean();
+      const matchingMemberIds = members.map((member) => member._id);
+      if (filter.memberId) {
+        const requestedMemberId = String(filter.memberId);
+        filter.memberId = { $in: matchingMemberIds.filter((memberId) => String(memberId) === requestedMemberId) };
+      } else {
+        filter.memberId = { $in: matchingMemberIds };
+      }
+    }
 
     const page = intParam(req.query.page, 1);
     const pageSize = intParam(req.query.pageSize, 15, { min: 5, max: 100 });
-    const [total, rows] = await Promise.all([
-      AttendanceRecord.countDocuments(filter),
-      AttendanceRecord.find(filter)
-        .sort({ checkIn: -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .lean(),
+    const [result] = await AttendanceRecord.aggregate([
+      { $match: filter },
+      { $sort: { checkIn: -1 } },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          items: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
+        },
+      },
     ]);
+    const rows = result?.items ?? [];
+    const total = result?.metadata?.[0]?.total ?? 0;
 
     const ctx = await loadGymContext(gymId);
     const memberIds = [...new Set(rows.map((r) => String(r.memberId)))];

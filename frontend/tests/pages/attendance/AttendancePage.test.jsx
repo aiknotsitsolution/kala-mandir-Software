@@ -121,22 +121,29 @@ describe("AttendancePage tabs and data loading", () => {
             { id: "a1", memberId: "m1", memberName: "Asha Kapoor", memberCode: "KM-001", status: "checked_in", checkIn: "2026-11-18T09:00:00.000Z", method: "qr" },
             { id: "a2", memberId: "m2", memberName: "Riya Shah", memberCode: "KM-002", status: "checked_in", checkIn: "2026-11-18T10:00:00.000Z", method: "manual" },
         ];
-        mockData.listAttendance = vi.fn(async ({ page, pageSize }) => ({
-            items: records.slice((page - 1) * pageSize, page * pageSize),
-            total: records.length,
-            page,
-            pageSize,
-        }));
+        mockData.listAttendance = vi.fn(async ({ page, pageSize, search }) => {
+            const matchingRecords = records.filter((record) => !search ||
+                `${record.memberName} ${record.memberCode}`.toLowerCase().includes(search.toLowerCase()));
+            return {
+                items: matchingRecords.slice((page - 1) * pageSize, page * pageSize),
+                total: matchingRecords.length,
+                page,
+                pageSize,
+            };
+        });
         renderPage("/attendance?tab=history&from=2026-11-18&to=2026-11-18");
 
         expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
         await user.type(screen.getByRole("textbox", { name: "Search student" }), "Riya");
 
-        expect(await screen.findByText("Riya Shah")).toBeInTheDocument();
-        expect(screen.queryByText("Asha Kapoor")).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getByText("Riya Shah")).toBeInTheDocument();
+            expect(screen.queryByText("Asha Kapoor")).not.toBeInTheDocument();
+        });
         await user.click(screen.getByRole("button", { name: "Export CSV" }));
 
         await waitFor(() => expect(mockDownloadCsv).toHaveBeenCalledTimes(1));
+        expect(mockData.listAttendance).toHaveBeenCalledWith(expect.objectContaining({ search: "Riya" }));
         expect(mockToCsv.mock.calls[0][0].map((record) => record.memberName)).toEqual(["Riya Shah"]);
         expect(mockDownloadCsv.mock.calls[0][0]).toContain("search-Riya");
     });

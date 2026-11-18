@@ -25,11 +25,8 @@ import { ATTENDANCE_STATUS_LABELS, METHOD_LABELS } from "./labels";
 const PAGE_SIZE = 15;
 /** Default window shown when the panel opens. */
 const DEFAULT_RANGE_DAYS = 7;
-/** Services cap page size at 200 — use it to sweep the export in fewest calls. */
-const EXPORT_PAGE_SIZE = 200;
-/** Safety net so a huge filter cannot loop forever while exporting. */
-const MAX_EXPORT_PAGES = 25;
-const SEARCH_PAGE_SIZE = 100;
+/** API page-size limit; use it to sweep the export in fewest calls. */
+const EXPORT_PAGE_SIZE = 100;
 const STATUS_STYLES = {
     checked_in: "border-primary/30 bg-primary/10 text-primary",
     checked_out: "border-border bg-muted text-muted-foreground",
@@ -44,19 +41,6 @@ function defaultFrom() {
 }
 function defaultTo() {
     return ymdInTz(new Date());
-}
-async function listAllAttendanceForSearch(data, query) {
-    const firstPage = await data.listAttendance({ ...query, page: 1, pageSize: SEARCH_PAGE_SIZE });
-    const pageSize = firstPage.pageSize || SEARCH_PAGE_SIZE;
-    const pageCount = Math.ceil(firstPage.total / pageSize);
-    if (pageCount <= 1)
-        return firstPage.items;
-    const remainingPages = await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) => data.listAttendance({
-        ...query,
-        page: index + 2,
-        pageSize,
-    })));
-    return [...firstPage.items, ...remainingPages.flatMap((page) => page.items)];
 }
 function matchesSearch(record, query) {
     const normalized = query.trim().toLocaleLowerCase();
@@ -92,13 +76,10 @@ export function AttendanceHistoryContent() {
     const [editing, setEditing] = useState(null);
     const [exporting, setExporting] = useState(false);
     const debouncedSearch = useDebounced(search, 300);
-    const searchActive = search.trim().length > 0;
     const searchSettled = search.trim() === debouncedSearch.trim();
     const rangeValid = from.length > 0 && to.length > 0 && from <= to;
-    const query = useMemo(() => ({ from, to, status, page, pageSize: PAGE_SIZE }), [from, to, status, page]);
-    const searchQuery = useMemo(() => ({ from, to, status }), [from, to, status]);
-    const list = useAsync(() => data.listAttendance(query), [data, query], { enabled: rangeValid && !searchActive });
-    const searchList = useAsync(() => listAllAttendanceForSearch(data, searchQuery), [data, searchQuery], { enabled: rangeValid && debouncedSearch.trim().length > 0 });
+    const query = useMemo(() => ({ from, to, status, page, pageSize: PAGE_SIZE, search: debouncedSearch.trim() }), [from, to, status, page, debouncedSearch]);
+    const list = useAsync(() => data.listAttendance(query), [data, query], { enabled: rangeValid });
     /* Live refresh — a fresh studio QR check-in appears in history without a
        manual refresh (throttled bursts make it one reload, not five). */
     const lastLiveReloadRef = useRef(0);
@@ -107,11 +88,8 @@ export function AttendanceHistoryContent() {
         if (now - lastLiveReloadRef.current < 2500)
             return;
         lastLiveReloadRef.current = now;
-        if (searchActive)
-            searchList.reload();
-        else
-            list.reload();
-    }), [list.reload, searchActive, searchList.reload]);
+        list.reload();
+    }), [list.reload]);
     // A shrunken result set can leave us stranded past the last page — snap back.
     useEffect(() => {
         if (!list.data)
@@ -127,23 +105,13 @@ export function AttendanceHistoryContent() {
         setSearch("");
         setPage(1);
     };
-    const searchItems = useMemo(() => (searchList.data ?? []).filter((record) => matchesSearch(record, debouncedSearch)), [searchList.data, debouncedSearch]);
-    const total = searchActive ? searchItems.length : list.data?.total ?? 0;
-    useEffect(() => {
-        if (!searchActive)
-            return;
-        const searchTotalPages = Math.max(1, Math.ceil(searchItems.length / PAGE_SIZE));
-        if (page > searchTotalPages)
-            setPage(searchTotalPages);
-    }, [page, searchActive, searchItems.length]);
+    const items = list.data?.items ?? [];
+    const total = list.data?.total ?? 0;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const firstRow = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
     const lastRow = Math.min(page * PAGE_SIZE, total);
-    const items = searchActive
-        ? searchItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-        : list.data?.items ?? [];
-    const loading = searchActive ? searchList.loading || !searchSettled : list.loading;
-    const error = searchActive ? searchList.error : list.error;
+    const loading = list.loading || !searchSettled;
+    const error = list.error;
     const handleExport = () => {
         if (exporting || !rangeValid)
             return;
@@ -153,12 +121,12 @@ export function AttendanceHistoryContent() {
                 const collected = [];
                 let currentPage = 1;
                 let currentTotal = Number.POSITIVE_INFINITY;
-                while (collected.length < currentTotal &&
-                    currentPage <= MAX_EXPORT_PAGES) {
+                while (collected.length < currentTotal) {
                     const result = await data.listAttendance({
                         from,
                         to,
                         status,
+                        search: debouncedSearch.trim() || undefined,
                         page: currentPage,
                         pageSize: EXPORT_PAGE_SIZE,
                     });
@@ -168,7 +136,7 @@ export function AttendanceHistoryContent() {
                         break;
                     currentPage += 1;
                 }
-                const matchingRecords = collected.filter((record) => matchesSearch(record, search));
+                const matchingRecords = collected.filter((record) => matchesSearch(record, debouncedSearch));
                 if (matchingRecords.length === 0) {
                     toast.info("Nothing to export for these filters.");
                     return;
@@ -243,6 +211,7 @@ export function AttendanceHistoryContent() {
                   id="history-search"
                   aria-label="Search student"
                   placeholder="Name or student ID"
+                  maxLength={100}
                   value={search}
                   onChange={(event) => {
                     setSearch(event.target.value);
@@ -272,9 +241,9 @@ export function AttendanceHistoryContent() {
           </CardContent>) : !rangeValid ? (<CardContent>
             <EmptyState title="Check the date range" description="The start date has to be on or before the end date."/>
           </CardContent>) : error ? (<CardContent>
-            <ErrorState title="Unable to load attendance" message={error} onRetry={searchActive ? searchList.reload : list.reload}/>
+            <ErrorState title="Unable to load attendance" message={error} onRetry={list.reload}/>
           </CardContent>) : items.length === 0 ? (<CardContent>
-            <EmptyState title={searchActive ? "No matching attendance" : "No attendance in this range"} description={searchActive ? "Try another student name or ID." : "Try a wider date range, or check back after the first scan of the day."} action={<Button size="sm" variant="outline" onClick={resetFilters}>
+            <EmptyState title={debouncedSearch ? "No matching attendance" : "No attendance in this range"} description={debouncedSearch ? "Try another student name or ID." : "Try a wider date range, or check back after the first scan of the day."} action={<Button size="sm" variant="outline" onClick={resetFilters}>
                   Reset filters
                 </Button>}/>
           </CardContent>) : (<>
@@ -367,10 +336,7 @@ export function AttendanceHistoryContent() {
             if (!open)
                 setEditing(null);
         }} onSaved={() => {
-            if (searchActive)
-                searchList.reload();
-            else
-                list.reload();
+            list.reload();
         }}/>
     </div>);
 }
