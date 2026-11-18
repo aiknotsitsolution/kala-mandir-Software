@@ -30,7 +30,17 @@ describe("AttendancePage tabs and data loading", () => {
         Object.assign(mockData, {
             getClassDaySummary: vi.fn(async () => ({})),
             listClassSlots: vi.fn(async () => []),
-            listAttendance: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 100 })),
+            listAllMembers: vi.fn(async () => [
+                { id: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", status: "active" },
+                { id: "m2", fullName: "Riya Shah", memberCode: "KM-002", status: "active" },
+                { id: "m3", fullName: "Inactive Student", memberCode: "KM-003", status: "inactive" },
+            ]),
+            listAttendance: vi.fn(async () => ({
+                items: [{ id: "a1", memberId: "m1", attendanceStatus: "present" }],
+                total: 1,
+                page: 1,
+                pageSize: 100,
+            })),
             getClassRoster: vi.fn(async () => ({ students: [] })),
         });
     });
@@ -41,8 +51,12 @@ describe("AttendancePage tabs and data loading", () => {
         const viewAllTab = screen.getByRole("tab", { name: "View All" });
         expect(screen.getAllByRole("tab")[0]).toBe(viewAllTab);
         expect(viewAllTab).toHaveAttribute("aria-selected", "true");
-        expect(await screen.findByText("No attendance recorded yet.")).toBeInTheDocument();
+        expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
+        expect(screen.getByText("Riya Shah")).toBeInTheDocument();
+        expect(screen.getByText("Not marked")).toBeInTheDocument();
+        expect(screen.queryByText("Inactive Student")).not.toBeInTheDocument();
         expect(mockData.listAttendance).toHaveBeenCalledTimes(1);
+        expect(mockData.listAllMembers).toHaveBeenCalledTimes(1);
         expect(mockData.getClassRoster).not.toHaveBeenCalled();
     });
 
@@ -50,7 +64,7 @@ describe("AttendancePage tabs and data loading", () => {
         const user = userEvent.setup();
         renderPage();
 
-        await screen.findByText("No attendance recorded yet.");
+        await screen.findByText("Asha Kapoor");
         await user.click(screen.getByRole("tab", { name: /Mark/ }));
         expect(screen.getByRole("tab", { name: /Mark/ })).toHaveAttribute("aria-selected", "true");
         expect(mockData.listAttendance).toHaveBeenCalledTimes(1);

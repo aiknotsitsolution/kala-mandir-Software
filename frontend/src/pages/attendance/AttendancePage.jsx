@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SmartImage } from "@/components/shared/SmartImage";
+import { ErrorState } from "@/components/shared/States";
 import { useAuth, useData } from "@/auth/AuthProvider";
 import { useAsync, useDebounced } from "@/hooks";
 import { subscribeLiveNotification } from "@/lib/liveBus";
@@ -43,6 +44,7 @@ import { AttendanceHistoryContent } from "./AttendanceHistoryPage";
 /** Status → label, dot colour, chip classes. */
 const STATUS_META = {
     present: { label: "Present", short: "P", dot: "bg-success", chip: "border-success/40 bg-success/15 text-success dark:text-success", activeText: "text-success", activeRing: "border-success bg-success", hover: "hover:border-success/40 hover:bg-success/5 hover:text-success", tick: "border-success/40 bg-success/10 text-success", tickDot: "bg-success" },
+    late: { label: "Late", short: "L", dot: "bg-amber-500", chip: "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400", activeText: "text-amber-600 dark:text-amber-400", activeRing: "border-amber-500 bg-amber-500", hover: "hover:border-amber-500/40 hover:bg-amber-500/5 hover:text-amber-600 dark:hover:text-amber-400", tick: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400", tickDot: "bg-amber-500" },
     absent: { label: "Absent", short: "A", dot: "bg-destructive", chip: "border-destructive/40 bg-destructive/15 text-destructive dark:text-destructive-foreground", activeText: "text-destructive", activeRing: "border-destructive bg-destructive", hover: "hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive", tick: "border-destructive/40 bg-destructive/10 text-destructive", tickDot: "bg-destructive" },
     leave: { label: "Leave", short: "L", dot: "bg-amber-500", chip: "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400", activeText: "text-amber-600 dark:text-amber-400", activeRing: "border-amber-500 bg-amber-500", hover: "hover:border-amber-500/40 hover:bg-amber-500/5 hover:text-amber-600 dark:hover:text-amber-400", tick: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400", tickDot: "bg-amber-500" },
     holiday: { label: "Holiday", short: "H", dot: "bg-sky-500", chip: "border-sky-500/40 bg-sky-500/15 text-sky-600 dark:text-sky-400", activeText: "text-sky-600 dark:text-sky-400", activeRing: "border-sky-500 bg-sky-500", hover: "hover:border-sky-500/40 hover:bg-sky-500/5 hover:text-sky-600 dark:hover:text-sky-400", tick: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400", tickDot: "bg-sky-500" },
@@ -51,6 +53,7 @@ const STATUS_ORDER = ["present", "absent", "leave", "holiday"];
 
 function StatusChip({ status }) {
     const meta = STATUS_META[status];
+    if (!status) return <Badge variant="outline">Not marked</Badge>;
     if (!meta) return <Badge variant="outline">—</Badge>;
     return (<Badge variant="outline" className={cn("gap-1 font-medium tabular-nums", meta.chip)}>
       <span className={cn("size-2 shrink-0 rounded-full", meta.dot)}/>
@@ -215,6 +218,22 @@ function StatCard({ label, value, icon, tone }) {
 }
 
 const ymdOf = (d) => format(d, "yyyy-MM-dd");
+
+async function listAllAttendance(data, range) {
+    const pageSize = 100;
+    const firstPage = await data.listAttendance({ ...range, page: 1, pageSize });
+    const pageCount = Math.ceil(firstPage.total / firstPage.pageSize);
+    if (pageCount <= 1) return firstPage;
+
+    const remainingPages = await Promise.all(
+        Array.from({ length: pageCount - 1 }, (_, index) =>
+            data.listAttendance({ ...range, page: index + 2, pageSize: firstPage.pageSize })),
+    );
+    return {
+        ...firstPage,
+        items: [...firstPage.items, ...remainingPages.flatMap((page) => page.items)],
+    };
+}
 
 /** "HH:mm" → minutes since midnight (NaN on junk). */
 const toMin = (hhmm) => {
@@ -541,8 +560,34 @@ export function AttendancePage() {
         const start = new Date(y, m - 1, d);
         return { from: start.toISOString(), to: new Date(start.getTime() + 86_399_999).toISOString() };
     }, [viewAllDate]);
-    const viewAllList = useAsync(() => data.listAttendance({ from: viewAllRange.from, to: viewAllRange.to, page: 1, pageSize: 100 }), [data, viewAllRange], { enabled: activeTab === "all" });
-    const viewAllRows = useMemo(() => (viewAllList.data?.items ?? []).filter((r) => r.attendanceStatus), [viewAllList.data]);
+    const viewAllMembers = useAsync(() => data.listAllMembers(), [data], { enabled: activeTab === "all" });
+    const viewAllList = useAsync(() => listAllAttendance(data, viewAllRange), [data, viewAllRange], { enabled: activeTab === "all" });
+    const viewAllRows = useMemo(() => {
+        const attendanceByMember = new Map();
+        for (const record of viewAllList.data?.items ?? []) {
+            const memberId = String(record.memberId ?? "");
+            if (memberId && record.attendanceStatus && !attendanceByMember.has(memberId))
+                attendanceByMember.set(memberId, record);
+        }
+        return (viewAllMembers.data ?? [])
+            .filter((member) => member.status === "active")
+            .map((member) => {
+                const memberId = String(member.id);
+                const record = attendanceByMember.get(memberId);
+                return {
+                    ...record,
+                    id: memberId,
+                    memberId,
+                    memberName: member.fullName ?? "Student",
+                    memberCode: member.memberCode ?? null,
+                    memberPhoto: member.photoUrl ?? null,
+                    attendanceStatus: record?.attendanceStatus ?? null,
+                };
+            })
+            .sort((a, b) => a.memberName.localeCompare(b.memberName));
+    }, [viewAllMembers.data, viewAllList.data]);
+    const viewAllLoading = viewAllMembers.loading || viewAllList.loading;
+    const viewAllError = viewAllMembers.error ?? viewAllList.error;
     const viewAllLabel = format(new Date(`${viewAllDate}T00:00:00`), "EEE, d MMM yyyy");
 
     // Class-attendance rows only (those carry an attendanceStatus).
@@ -1089,20 +1134,29 @@ export function AttendancePage() {
       {/* ------- View All: aaj ki attendance — no filters, one date chip ------- */}
       <TabsContent value="all">
         <div className="flex flex-col gap-4">
-          <label className="relative inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-secondary/70" title="Change date">
-            <CalendarIcon className="size-3.5 text-muted-foreground"/>
-            {viewAllLabel}
-            <input
-              type="date"
-              aria-label="Attendance date"
-              value={viewAllDate}
-              onChange={(e) => { if (e.target.value) setViewAllDate(e.target.value); }}
-              onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* older browsers: fall back to focusing the input */ } }}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-          </label>
-          {viewAllList.loading ? (<p className="py-10 text-center text-sm text-muted-foreground">Loading attendance…</p>)
-            : viewAllRows.length === 0 ? (<p className="py-10 text-center text-sm text-muted-foreground">No attendance recorded yet.</p>)
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="relative inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-secondary/70" title="Change date">
+              <CalendarIcon className="size-3.5 text-muted-foreground"/>
+              {viewAllLabel}
+              <input
+                type="date"
+                aria-label="Attendance date"
+                value={viewAllDate}
+                onChange={(e) => { if (e.target.value) setViewAllDate(e.target.value); }}
+                onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* older browsers: fall back to focusing the input */ } }}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {viewAllLoading ? "Loading students…" : `${viewAllRows.length} active students · unmarked students included`}
+            </p>
+          </div>
+          {viewAllError ? (<ErrorState message={viewAllError} onRetry={() => {
+                viewAllMembers.reload();
+                viewAllList.reload();
+            }}/>)
+            : viewAllLoading ? (<p className="py-10 text-center text-sm text-muted-foreground">Loading attendance…</p>)
+            : viewAllRows.length === 0 ? (<p className="py-10 text-center text-sm text-muted-foreground">No active students found.</p>)
             : (<ul className="space-y-2 sm:space-y-0 sm:rounded-xl sm:border sm:border-border/60 sm:divide-y sm:divide-border/60">
                 {viewAllRows.map((row) => (<li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:rounded-none sm:border-0 sm:px-4 sm:py-3 sm:shadow-none">
                   <div className="flex min-w-0 items-center gap-3">
