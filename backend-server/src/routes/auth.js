@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Types } from "mongoose";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import User from "../models/User.js";
@@ -13,12 +14,12 @@ const router = Router();
 const loginSchema = z
   .object({
     email: z.string().trim().email("Enter a valid email address").optional(),
-    memberCode: z.string().trim().min(3, "Student code is too short").optional(),
+    memberId: z.string().regex(/^[a-f\d]{24}$/i, "Enter a valid MongoDB student ID").optional(),
     phone: z.string().trim().optional(),
     password: z.string().min(1, "Password is required"),
   })
-  .refine((v) => v.email || v.memberCode || v.phone, {
-    message: "Email, Student code or mobile number is required",
+  .refine((v) => v.email || v.memberId || v.phone, {
+    message: "Email, MongoDB student ID or mobile number is required",
     path: ["email"],
   });
 
@@ -62,18 +63,15 @@ async function findPhoneUsers(phone) {
   return [...staff, ...memberUsers];
 }
 
-/** POST /api/auth/login { email | memberCode | phone, password } → { token, user } */
+/** POST /api/auth/login { email | memberId | phone, password } → { token, user } */
 router.post(
   "/login",
   asyncHandler(async (req, res) => {
-    const { email, memberCode, phone, password } = parseBody(loginSchema, req.body);
+    const { email, memberId, phone, password } = parseBody(loginSchema, req.body);
 
     const candidates = [];
-    if (memberCode) {
-      // Legacy: identify by the printed member code (PG-0001).
-      const member = await Member.findOne({ memberCode: memberCode.trim().toUpperCase() })
-        .select("_id")
-        .lean();
+    if (memberId && Types.ObjectId.isValid(memberId)) {
+      const member = await Member.findById(memberId).select("_id").lean();
       if (member) {
         const user = await User.findOne({ memberId: member._id, role: "member" }).lean();
         if (user) candidates.push(user);
@@ -116,8 +114,8 @@ router.post(
 
     if (!user) {
       throw unauthorized(
-        memberCode
-          ? "Invalid student code or password"
+        memberId
+          ? "Invalid student ID or password"
           : phone && !email
             ? "Invalid mobile number or password"
             : email && !phone

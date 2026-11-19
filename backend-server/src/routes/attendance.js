@@ -50,8 +50,8 @@ const checkinTokenSchema = z.object({
   notes: z.string().nullish(),
 });
 
-const checkinCodeSchema = z.object({
-  code: z.string().min(1, "Student code is required"),
+const checkinMemberSchema = z.object({
+  memberId: z.string().regex(/^[a-f\d]{24}$/i, "Student ID is invalid"),
   method: scanMethod.optional(),
   notes: z.string().nullish(),
 });
@@ -90,18 +90,18 @@ router.post(
   }),
 );
 
-/** POST /api/attendance/checkin-code { code, method?, notes? } → CheckInResult */
+/** POST /api/attendance/checkin-member { memberId, method?, notes? } → CheckInResult */
 router.post(
-  "/attendance/checkin-code",
+  "/attendance/checkin-member",
   requireAuth,
   requireCap("qr.scan"),
   asyncHandler(async (req, res) => {
-    const input = parseBody(checkinCodeSchema, req.body);
+    const input = parseBody(checkinMemberSchema, req.body);
     const ctx = await loadGymContext(req.user.gymId);
     const result = await runCheckIn({
       gymId: ctx.gym._id,
       actorId: req.user.id,
-      lookup: { code: input.code },
+      lookup: { memberId: input.memberId },
       method: input.method ?? "qr",
       notes: input.notes ?? null,
       ctx,
@@ -119,9 +119,8 @@ const classMarkSchema = z.object({
   slotId: z.string().min(1, "Pick a class slot"),
   /** Session date "YYYY-MM-DD"; defaults to today in the studio timezone. */
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").nullish(),
-  /** Mark by Student record id (roster tap) XOR by Student ID code (manual). */
-  memberId: z.string().nullish(),
-  code: z.string().nullish(),
+  /** Mark by MongoDB member ID. */
+  memberId: z.string().regex(/^[a-f\d]{24}$/i, "Student ID is invalid").nullish(),
   method: scanMethod.optional(),
   notes: z.string().nullish(),
 });
@@ -276,7 +275,6 @@ router.get(
       isSlotDay,
       students: members.map((m) => ({
         memberId: String(m._id),
-        memberCode: m.memberCode ?? null,
         fullName: m.fullName ?? "Student",
         photoUrl: m.photoUrl ?? null,
         status: m.status,
@@ -301,9 +299,7 @@ router.post(
   requireCap("attendance.mark"),
   asyncHandler(async (req, res) => {
     const input = parseBody(classMarkSchema, req.body);
-    if (!input.memberId && !String(input.code ?? "").trim()) {
-      throw badRequest("Enter a Student ID or pick a student to mark attendance", "student_required");
-    }
+    if (!input.memberId) throw badRequest("Select a student to mark attendance", "student_required");
     const ctx = await loadGymContext(req.user.gymId);
     const result = await markSlotAttendance({
       gymId: req.user.gymId,
@@ -311,7 +307,7 @@ router.post(
       actorRole: req.user.role,
       slotId: input.slotId,
       date: input.date ?? null,
-      lookup: input.memberId ? { memberId: input.memberId } : { code: input.code },
+      lookup: { memberId: input.memberId },
       method: input.method ?? "class",
       notes: input.notes ?? null,
       ctx,
@@ -327,16 +323,14 @@ router.post(
   requireCap("attendance.mark"),
   asyncHandler(async (req, res) => {
     const input = parseBody(classMarkSchema, req.body);
-    if (!input.memberId && !String(input.code ?? "").trim()) {
-      throw badRequest("Enter a Student ID or pick a student to mark attendance", "student_required");
-    }
+    if (!input.memberId) throw badRequest("Select a student to mark attendance", "student_required");
     const ctx = await loadGymContext(req.user.gymId);
     const result = await markDemoAttendance({
       gymId: req.user.gymId,
       actorId: req.user.id,
       actorRole: req.user.role,
       classId: input.slotId,
-      lookup: input.memberId ? { memberId: input.memberId } : { code: input.code },
+      lookup: { memberId: input.memberId },
       method: input.method ?? "class",
       notes: input.notes ?? null,
       ctx,
@@ -390,8 +384,8 @@ const gymScanSchema = z.object({
 /**
  * POST /api/attendance/gym-scan { token } → { action, message, attendance }
  *
- * The member scans the ONE shared front-desk gym QR from their portal:
- * first scan checks them in (timer starts), the next checks them out.
+ * The member scans and confirms the ONE shared front-desk QR from their portal.
+ * The authenticated account's memberId identifies the student.
  */
 router.post(
   "/attendance/gym-scan",
@@ -538,10 +532,11 @@ router.get(
     if (search.length > 100) throw badRequest("Search must be 100 characters or fewer.");
     if (search) {
       const rx = new RegExp(escapeRegExp(search), "i");
-      const members = await Member.find({
-        gymId,
-        $or: [{ fullName: rx }, { memberCode: rx }],
-      })
+      const members = await Member.find(
+        Types.ObjectId.isValid(search)
+          ? { gymId, _id: new Types.ObjectId(search) }
+          : { gymId, fullName: rx },
+      )
         .select("_id")
         .lean();
       const matchingMemberIds = members.map((member) => member._id);
@@ -901,14 +896,13 @@ router.get(
       _id: { $in: [...byMember.keys()] },
       plannedHoursPerDay: { $gt: 0 },
     })
-      .select("fullName memberCode photoUrl plannedHoursPerDay")
+      .select("fullName photoUrl plannedHoursPerDay")
       .lean();
     res.json(
       members
         .map((m) => ({
           memberId: String(m._id),
           memberName: m.fullName,
-          memberCode: m.memberCode,
           memberPhoto: m.photoUrl ?? null,
           plannedHours: m.plannedHoursPerDay,
           hours: Math.round((byMember.get(String(m._id)) / 3_600_000) * 10) / 10,
@@ -1007,7 +1001,7 @@ router.get(
     ]);
 
     const members = await Member.find({ _id: { $in: rows.map((r) => r._id) } })
-      .select("memberCode fullName")
+      .select("fullName")
       .lean();
     const memberById = new Map(members.map((m) => [String(m._id), m]));
 
@@ -1016,7 +1010,6 @@ router.get(
         const member = memberById.get(String(row._id));
         return {
           memberId: String(row._id),
-          memberCode: member?.memberCode ?? "",
           memberName: member?.fullName ?? "Student",
           visits: row.visits,
         };

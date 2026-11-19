@@ -103,7 +103,7 @@ export function ManageEnrollmentsDialog({ gymClass, open, onOpenChange, canManag
                       {candidates.length > 0 ? "Choose A student" : "Every Student is enrolled"}
                     </SelectItem>
                     {candidates.map((member) => (<SelectItem key={member.id} value={member.id}>
-                        {member.fullName} · {member.memberCode}
+                        {member.fullName} · {member.id}
                       </SelectItem>))}
                   </SelectContent>
                 </Select>)}
@@ -128,7 +128,7 @@ export function ManageEnrollmentsDialog({ gymClass, open, onOpenChange, canManag
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{row.memberName ?? "Student"}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {row.memberCode} · enrolled {relativeTime(row.enrolledAt)}
+                    {row.memberId} · enrolled {relativeTime(row.enrolledAt)}
                   </p>
                 </div>
                 <Badge variant="outline" className={cn(STATUS_STYLES[row.status])}>

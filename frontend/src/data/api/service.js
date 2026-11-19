@@ -295,9 +295,9 @@ export class ApiDataService {
         });
         return this.normalizeCheckIn(payload);
     }
-    async checkInByMemberCode(code, ctx) {
-        const payload = await apiPost("/attendance/checkin-code", {
-            code,
+    async checkInByMemberId(memberId, ctx) {
+        const payload = await apiPost("/attendance/checkin-member", {
+            memberId,
             method: ctx?.method,
             notes: ctx?.notes ?? undefined,
         });
@@ -433,7 +433,6 @@ export class ApiDataService {
         }
         return {
             id: raw.id,
-            memberCode: raw.memberCode,
             fullName: raw.fullName,
             phone: raw.phone ?? null,
             email: raw.email ?? null,
@@ -510,7 +509,7 @@ export class ApiDataService {
         invalidateGymCache();
         return updated;
     }
-    /** student scans the single front-desk studio QR → toggles check-in/out. */
+    /** Student confirms a scanned shared studio QR → toggles check-in/out. */
     async gymScan(token, coords) {
         return apiPost("/attendance/gym-scan", {
             token,
@@ -519,10 +518,7 @@ export class ApiDataService {
                 : {}),
         });
     }
-    /**
-     * Scan-the-wall-QR login flow → marks the signed-in member's attendance
-     * (check-in only). Returns `{ status, message, attendance?, member? }`.
-     */
+    /** Legacy explicit check-in-only action for an authenticated member. */
     async checkinGym(token, coords) {
         return apiPost("/me/checkin-gym", {
             token,

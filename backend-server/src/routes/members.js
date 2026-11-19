@@ -17,7 +17,6 @@ import { asyncHandler, badRequest, notFound, conflict } from "../lib/errors.js";
 import { parseBody, intParam } from "../middleware/validate.js";
 import { toMember, toMembership, toAttendance, toPayment, ymd } from "../lib/serialize.js";
 import { generateQrToken } from "../lib/qr.js";
-import { nextMemberCode } from "../lib/codes.js";
 import { writeAudit, pick } from "../lib/audit.js";
 import { planEndDate, renewalStartDate, currentMembership } from "../lib/membership.js";
 import { quotaForPlan, computeQuota } from "../lib/quota.js";
@@ -52,7 +51,7 @@ const initialPaymentSchema = z.object({
 
 const createMemberSchema = z.object({
   fullName: z.string().trim().min(1, "Full name is required"),
-  // Optional: students can sign in with their printed Student ID instead.
+  // Optional: students can sign in with their MongoDB member ID instead.
   email: z
     .union([z.string().trim().email("Enter a valid email address"), z.literal(""), z.null()])
     .optional()
@@ -276,7 +275,7 @@ router.get(
       rows = rows.filter(
         (m) =>
           m.fullName.toLowerCase().includes(search) ||
-          m.memberCode.toLowerCase().includes(search) ||
+          m.id.toLowerCase().includes(search) ||
           m.phone.replace(/\s/g, "").includes(compactSearch) ||
           (m.email?.toLowerCase().includes(search) ?? false),
       );
@@ -448,12 +447,10 @@ router.post(
         const selectedClassSlots = input.slotIds !== undefined
           ? await resolveMemberClassSlots(gymId, input.slotIds, classTags, session)
           : [];
-        const memberCode = await nextMemberCode(gymId, session);
         const [member] = await Member.create(
           [
             {
               gymId,
-              memberCode,
               fullName: input.fullName,
               email: input.email ?? null,
               phone: input.phone,
@@ -592,12 +589,11 @@ router.post(
           }
         }
 
-        // Portal login: the member can sign in with their member code.
+        // Portal login uses the member's MongoDB ID.
         await ensureMemberLogin(
           {
             gymId,
             memberId: member._id,
-            memberCode,
             fullName: input.fullName,
             phone: input.phone,
             password: input.loginPassword,
@@ -653,7 +649,7 @@ router.post(
             entity: "members",
             entityId: String(member._id),
             action: "create",
-            newValues: { memberCode, fullName: member.fullName, planName: plan.name },
+            newValues: { fullName: member.fullName, planName: plan.name },
           },
           session,
         );
@@ -894,7 +890,7 @@ router.patch(
               entity: "slot_enrollments",
               entityId: String(enrollment._id),
               action: "enroll",
-              newValues: { slot: slot.name, memberCode: current.memberCode },
+              newValues: { slot: slot.name },
             },
             session,
           );
@@ -916,7 +912,7 @@ router.patch(
               entityId: String(enrollment._id),
               action: "unenroll",
               oldValues: { status: "enrolled" },
-              newValues: { status: "cancelled", memberCode: current.memberCode },
+              newValues: { status: "cancelled" },
             },
             session,
           );
@@ -984,7 +980,7 @@ router.delete(
           entity: "members",
           entityId: String(member._id),
           action: "delete",
-          oldValues: { memberCode: member.memberCode, fullName: member.fullName },
+          oldValues: { fullName: member.fullName },
         },
         session,
       );
@@ -1146,7 +1142,6 @@ router.post(
           entityId: String(row._id),
           action: "create",
           newValues: {
-            memberCode: member.memberCode,
             planName: plan.name,
             startDate: ymd(start),
             endDate: ymd(end),

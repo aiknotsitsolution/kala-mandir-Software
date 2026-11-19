@@ -12,7 +12,7 @@ const MUTATING_METHODS = new Set([
     "createMember", "updateMember", "deleteMember", "setMemberStatus",
     "renewMembership", "setMembershipStatus", "rotateQrToken",
     "createPlan", "updatePlan", "archivePlan",
-    "checkInByToken", "checkInByMemberCode", "recordCheckout", "correctAttendance", "remindCheckout",
+    "checkInByToken", "checkInByMemberId", "recordCheckout", "correctAttendance", "remindCheckout",
     "createPayment", "refundPayment", "uploadPhoto", "changeMyPassword",
     "readMyReminders", "readMyReminder", "rotateGymQr", "updateTimeSlots",
     "updateCheckinSettings", "updateTheme", "gymScan", "checkinGym",

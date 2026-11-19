@@ -73,7 +73,7 @@ export async function rebuildNotifications(gymId, ctx) {
     if (end >= todayYmd && end <= soonestYmd) {
       upsert("expiry_warning", member._id, `${member._id}:${membership._id}:expiry_warning`, {
         title: "Membership expiring soon",
-        body: `${member.fullName} (${member.memberCode}) — membership ends on ${formatDateOnly(end)}.`,
+        body: `${member.fullName} — membership ends on ${formatDateOnly(end)}.`,
         severity: "warning",
         link,
       });
@@ -87,7 +87,7 @@ export async function rebuildNotifications(gymId, ctx) {
         `${member._id}:${membership._id}:membership_expired:${end}`,
         {
           title: "Membership expired",
-          body: `${member.fullName} (${member.memberCode}) — membership expired on ${formatDateOnly(end)}.`,
+          body: `${member.fullName} — membership expired on ${formatDateOnly(end)}.`,
           severity: "warning",
           link,
         },
@@ -98,7 +98,7 @@ export async function rebuildNotifications(gymId, ctx) {
     if (start <= todayYmd && !hasPayment.has(String(membership._id))) {
       upsert("payment_pending", member._id, `${member._id}:${membership._id}:payment_pending`, {
         title: "Payment pending",
-        body: `${member.fullName} (${member.memberCode}) — no payment recorded for the current membership.`,
+        body: `${member.fullName} — no payment recorded for the current membership.`,
         severity: "info",
         link,
       });

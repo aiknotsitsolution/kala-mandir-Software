@@ -46,7 +46,7 @@ function defaultTo() {
 }
 function matchesSearch(record, query) {
     const normalized = query.trim().toLocaleLowerCase();
-    return !normalized || `${record.memberName ?? ""} ${record.memberCode ?? ""}`.toLocaleLowerCase().includes(normalized);
+    return !normalized || `${record.memberName ?? ""} ${record.memberId ?? ""}`.toLocaleLowerCase().includes(normalized);
 }
 function AttendanceBadge({ status }) {
     return (<Badge variant="outline" className={cn("font-medium", STATUS_STYLES[status])}>
@@ -155,7 +155,7 @@ export function AttendanceHistoryContent() {
                     : "";
                 downloadCsv(`attendance-${from}-to-${to}${status === "all" ? "" : `-${status}`}${searchSuffix}`, toCsv(matchingRecords, [
                     { header: "Student", accessor: (row) => row.memberName ?? "" },
-                    { header: "Student ID", accessor: (row) => row.memberCode ?? "" },
+                    { header: "MongoDB ID", accessor: (row) => row.memberId ?? "" },
                     { header: "Slot", accessor: (row) => row.meta?.slotName ?? "" },
                     { header: "Check-in", accessor: (row) => formatDateTime(row.checkIn) },
                     {
@@ -348,7 +348,7 @@ export function AttendanceHistoryContent() {
                               {record.memberName ?? "Student"}
                             </p>
                             <p className="truncate text-xs text-muted-foreground">
-                              {record.memberCode ?? "—"}
+                              {record.memberId ?? "—"}
                             </p>
                           </div>
                         </div>

@@ -138,7 +138,6 @@ async function markExtraVisitAttendance({ gymId, member, actorId, ctx, now, dayK
           entityId: String(attendance._id),
           action: "create_class_attendance",
           newValues: {
-            memberCode: member.memberCode,
             slot: label,
             date: dayKey,
             method: "qr",
@@ -357,7 +356,7 @@ export async function runMemberSelfCheckIn({ member, actorId, ctx, notes = null 
   const result = await runCheckIn({
     gymId: member.gymId,
     actorId,
-    lookup: { code: member.memberCode },
+    lookup: { memberId: member._id },
     method: "qr",
     notes,
     ctx,

@@ -31,7 +31,7 @@ if (keep.length === 0) {
 const keepIds = keep.map((m) => m._id);
 console.log("Keeping:");
 for (const m of keep) {
-  console.log(`  - ${m.fullName} (${m.memberCode}) · ${m.phone}`);
+  console.log(`  - ${m.fullName} (${m._id}) · ${m.phone}`);
 }
 
 const remove = await Member.find({ _id: { $nin: keepIds } }).lean();

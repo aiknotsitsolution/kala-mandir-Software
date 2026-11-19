@@ -209,7 +209,7 @@ export function RosterDialog({ open, onOpenChange, slot, onChanged }) {
         return (allMembers.data ?? [])
             .filter((m) => m.status === "active")
             .filter((m) => !enrolledIds.has(m.id))
-            .filter((m) => !q || m.fullName.toLowerCase().includes(q) || m.memberCode.toLowerCase().includes(q))
+            .filter((m) => !q || m.fullName.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
             .slice(0, 40);
     }, [allMembers.data, debounced, enrolledIds]);
     const add = async (memberId) => {
@@ -244,7 +244,7 @@ export function RosterDialog({ open, onOpenChange, slot, onChanged }) {
             {roster.loading ? (<TableSkeleton rows={3} cols={2}/>) : (roster.data ?? []).length === 0 ? (<p className="px-1 py-3 text-sm text-muted-foreground">No students enrolled yet.</p>) : (roster.data ?? []).map((r) => (<div key={r.id} className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{r.memberName ?? "Student"}</p>
-                  <p className="text-xs text-muted-foreground">{r.memberCode}</p>
+                  <p className="text-xs text-muted-foreground">{r.memberId}</p>
                 </div>
                 {canManage ? (<Button variant="ghost" size="icon" onClick={() => remove(r.id)} aria-label="Remove from slot">
                     <XIcon className="size-4 text-muted-foreground"/>
@@ -261,7 +261,7 @@ export function RosterDialog({ open, onOpenChange, slot, onChanged }) {
               {allMembers.loading ? (<TableSkeleton rows={3} cols={2}/>) : candidates.length === 0 ? (<p className="px-1 py-2 text-sm text-muted-foreground">No matching students to add.</p>) : (candidates.map((m) => (<div key={m.id} className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-secondary/60">
                   <div className="min-w-0">
                     <p className="truncate text-sm">{m.fullName}</p>
-                    <p className="text-xs text-muted-foreground">{m.memberCode}</p>
+                    <p className="text-xs text-muted-foreground">{m.id}</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => add(m.id)}>Add</Button>
                 </div>)))}

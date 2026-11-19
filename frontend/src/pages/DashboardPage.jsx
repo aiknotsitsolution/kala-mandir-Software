@@ -263,7 +263,7 @@ export function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-medium text-foreground">{record.memberName}</p>
                         <p className="truncate text-[11.5px] text-muted-foreground">
-                          {record.memberCode} · {formatTime(record.checkIn)}
+                          {record.memberId} · {formatTime(record.checkIn)}
                         </p>
                       </div>
                       <span className={record.status === "checked_out"
@@ -289,7 +289,7 @@ export function DashboardPage() {
                           {member.fullName}
                         </Link>
                         <p className="truncate text-[11.5px] text-muted-foreground">
-                          {member.memberCode} · joined {formatDate(member.joinDate)}
+                          {member.id} · joined {formatDate(member.joinDate)}
                         </p>
                       </div>
                       <StatusBadge status={member.effectiveStatus}/>

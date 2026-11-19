@@ -96,7 +96,7 @@ export function PaymentRecordDialog({ open, onOpenChange, members, preset, onSav
                     </SelectTrigger>
                     <SelectContent position="popper">
                       {members.map((member) => (<SelectItem key={member.id} value={member.id}>
-                          {member.fullName} · {member.memberCode}
+                          {member.fullName} · {member.id}
                         </SelectItem>))}
                     </SelectContent>
                   </Select>)}/>

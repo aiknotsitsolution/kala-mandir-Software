@@ -81,9 +81,7 @@ export class ApiAuthProvider {
         };
     }
     /**
-     * Sign in with an email address, a printed Student ID (member code) or a
-     * mobile number. The server resolves all three; we just map each value to
-     * its request field.
+     * Sign in with an email address, MongoDB member ID, or mobile number.
      */
     async signIn(credentials) {
         const identifier = String(credentials?.identifier ?? "").trim();
@@ -95,7 +93,7 @@ export class ApiAuthProvider {
             if (isEmail)
                 body.email = identifier;
             else
-                body.memberCode = identifier;
+                body.memberId = identifier;
         }
         if (phone)
             body.phone = phone;
@@ -108,7 +106,7 @@ export class ApiAuthProvider {
         }
         catch (err) {
             if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-                throw new ApiError(err.status, "invalid_credentials", "Incorrect email/Student ID/mobile or password.");
+                throw new ApiError(err.status, "invalid_credentials", "Incorrect email/MongoDB ID/mobile or password.");
             }
             throw err;
         }

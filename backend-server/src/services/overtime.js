@@ -71,7 +71,7 @@ export async function notifyExpiredScan({ gymId, member, at = new Date() }) {
         memberId: null,
         type: "membership_expired",
         title: "Expired student tried to check in",
-        body: `${member.fullName} (${member.memberCode}) scanned the front-desk QR but their membership has expired — please follow up.`,
+        body: `${member.fullName} scanned the front-desk QR but their membership has expired — please follow up.`,
         severity: "warning",
         isRead: false,
         dedupeKey,

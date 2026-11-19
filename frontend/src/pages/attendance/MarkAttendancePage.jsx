@@ -33,7 +33,7 @@ export function MarkAttendancePage({ hideHeader = false }) {
 
     const [slotId, setSlotId] = useState("");
     const [date, setDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
-    const [code, setCode] = useState("");
+    const [memberIdInput, setMemberIdInput] = useState("");
     const [lastResult, setLastResult] = useState(null);
     const [markingId, setMarkingId] = useState(null);
 
@@ -53,7 +53,7 @@ export function MarkAttendancePage({ hideHeader = false }) {
             const who = result.member?.fullName ?? "Student";
             const quotaLabel = result.quota && result.quota.status !== "none" ? ` · ${result.quota.label}` : "";
             toast.success(`Attendance marked for ${who}${quotaLabel}`);
-            setCode("");
+            setMemberIdInput("");
             reload?.();
         }
         else {
@@ -75,12 +75,16 @@ export function MarkAttendancePage({ hideHeader = false }) {
         }
     };
 
-    const markByCode = () => {
-        if (!code.trim() || !slotId)
+    const markByMemberId = () => {
+        if (!memberIdInput.trim() || !slotId)
             return;
+        if (!/^[a-f\d]{24}$/i.test(memberIdInput.trim())) {
+            toast.error("Enter a valid MongoDB student ID.");
+            return;
+        }
         runManual(async () => {
             try {
-                const result = await data.markClassAttendance({ slotId, date, code: code.trim() });
+                const result = await data.markClassAttendance({ slotId, date, memberId: memberIdInput.trim() });
                 applyResult(result, roster.reload);
             }
             catch (error) {
@@ -94,7 +98,7 @@ export function MarkAttendancePage({ hideHeader = false }) {
     const markedCount = students.filter((s) => s.marked).length;
 
     return (<div className="space-y-6">
-      {!hideHeader ? <PageHeader title="Mark Attendance" description="Open a slot and tap Mark next to each student's name — or enter a Student ID for walk-ins and younger kids who can't scan."/> : null}
+      {!hideHeader ? <PageHeader title="Mark Attendance" description="Open a slot and tap Mark next to each student's name, or enter a MongoDB member ID for a walk-in."/> : null}
 
       {/* Slot + date picker */}
       <Card>
@@ -124,13 +128,13 @@ export function MarkAttendancePage({ hideHeader = false }) {
       <Card>
         <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-1.5">
-            <Label htmlFor="mark-code">Mark by Student ID</Label>
+            <Label htmlFor="mark-member-id">Mark by MongoDB member ID</Label>
             <div className="relative">
               <ScanLineIcon className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
-              <Input id="mark-code" placeholder="Enter or scan Student ID (e.g. KM-1042)" className="pl-8" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && markByCode()} disabled={!slotId}/>
+              <Input id="mark-member-id" placeholder="Enter the 24-character MongoDB ID" className="pl-8" value={memberIdInput} onChange={(e) => setMemberIdInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && markByMemberId()} disabled={!slotId}/>
             </div>
           </div>
-          <Button onClick={markByCode} disabled={!slotId || !code.trim() || manualSubmitting}>
+          <Button onClick={markByMemberId} disabled={!slotId || !memberIdInput.trim() || manualSubmitting}>
             {manualSubmitting ? <Loader2Icon className="size-4 animate-spin"/> : <CheckIcon className="size-4"/>}
             Mark attendance
           </Button>
@@ -167,7 +171,6 @@ export function MarkAttendancePage({ hideHeader = false }) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Student</TableHead>
-                      <TableHead>Student ID</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Attendance</TableHead>
                     </TableRow>
@@ -175,7 +178,6 @@ export function MarkAttendancePage({ hideHeader = false }) {
                   <TableBody>
                     {students.map((student) => (<TableRow key={student.memberId} className={cn(student.marked && "bg-km-gold/5")}>
                         <TableCell className="font-medium">{student.fullName}</TableCell>
-                        <TableCell className="text-muted-foreground">{student.memberCode ?? "—"}</TableCell>
                         <TableCell>
                           {student.status === "active" ? (<Badge variant="secondary">Active</Badge>) : (<Badge variant="outline">{student.status}</Badge>)}
                         </TableCell>

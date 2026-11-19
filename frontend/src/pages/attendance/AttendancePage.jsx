@@ -496,7 +496,7 @@ export function AttendancePage() {
             if (trainerFilter === "__no_trainer__" && student.trainerName?.trim()) return false;
             if (trainerFilter && trainerFilter !== "__no_trainer__" && student.trainerName?.trim() !== trainerFilter) return false;
             return !q || (student.fullName ?? "").toLowerCase().includes(q) ||
-                (student.memberCode ?? "").toLowerCase().includes(q);
+                (student.memberId ?? "").toLowerCase().includes(q);
         });
     }, [students, studentQuery, trainerFilter]);
     const studentsTotalPages = Math.max(1, Math.ceil(filteredStudents.length / MARK_PAGE_SIZE));
@@ -649,7 +649,6 @@ export function AttendancePage() {
                     id: memberId,
                     memberId,
                     memberName: member.fullName ?? "Student",
-                    memberCode: member.memberCode ?? null,
                     memberPhoto: member.photoUrl ?? null,
                     attendanceStatus: record?.attendanceStatus ?? null,
                 };
@@ -705,7 +704,7 @@ export function AttendancePage() {
         const q = search.trim().toLowerCase();
         return classRows.filter((r) => {
             if (viewSlotId !== "all" && String(r.classSlotId ?? "") !== viewSlotId) return false;
-            if (q && !(`${r.memberName ?? ""} ${r.memberCode ?? ""}`.toLowerCase().includes(q))) return false;
+            if (q && !(`${r.memberName ?? ""} ${r.memberId ?? ""}`.toLowerCase().includes(q))) return false;
             return true;
         });
     }, [classRows, viewSlotId, search]);
@@ -805,7 +804,7 @@ export function AttendancePage() {
         downloadCsv(`attendance-${viewDate}`, toCsv(indexed, [
             { header: "Sr. no.", accessor: (r) => r.index + 1 },
             { header: "Student", accessor: (r) => r.row.memberName ?? "" },
-            { header: "Student ID", accessor: (r) => r.row.memberCode ?? "" },
+            { header: "MongoDB ID", accessor: (r) => r.row.memberId ?? "" },
             { header: "Payment Mode", accessor: (r) => (r.row.paymentMethod ? PAYMENT_METHOD_LABELS[r.row.paymentMethod] ?? titleCase(r.row.paymentMethod) : "") },
             { header: "Classes", accessor: (r) => (r.row.quota ? `${r.row.quota.attended}/${r.row.quota.quota}` : "") },
             { header: "Class Left", accessor: (r) => (r.row.quota ? r.row.quota.remaining : "") },
@@ -992,7 +991,7 @@ export function AttendancePage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{s.fullName}</p>
                         <p className="text-xs text-muted-foreground">
-                          <span className="block truncate sm:inline">{s.memberCode ?? "—"}</span>
+                          <span className="block truncate sm:inline">{s.memberId ?? "—"}</span>
                           {/* Quota chips beside the ID — mirrors the students-page
                               tone rule (4+ left green · 2–3 yellow · 0–1 red). */}
                           {s.quota && s.quota.status !== "none" ? (() => {
@@ -1070,7 +1069,7 @@ export function AttendancePage() {
                       <SmartImage src={m.photoUrl} name={m.fullName ?? "Student"} className="size-8 shrink-0"/>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{m.fullName}</p>
-                        <p className="truncate text-xs text-muted-foreground">{m.memberCode ?? "—"}{m.planName ? ` · ${m.planName}` : ""}</p>
+                        <p className="truncate text-xs text-muted-foreground">{m.id}{m.planName ? ` · ${m.planName}` : ""}</p>
                       </div>
                     </div>
                     {walkInSavingId === m.id ? <Loader2Icon className="size-4 animate-spin text-muted-foreground"/> : (<div className="flex items-center gap-1.5">
@@ -1216,7 +1215,7 @@ export function AttendancePage() {
                             <SmartImage src={row.memberPhoto} name={row.memberName ?? "Student"} className="size-8 shrink-0"/>
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium">{row.memberName ?? "Student"}</p>
-                              <p className="truncate text-xs text-muted-foreground">{row.memberCode ?? "—"}</p>
+                              <p className="truncate text-xs text-muted-foreground">{row.memberId ?? "—"}</p>
                             </div>
                           </div>
                         </TableCell>
@@ -1460,7 +1459,7 @@ export function AttendancePage() {
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium">{row.memberName ?? "Student"}</p>
                                 <p className="truncate text-xs text-muted-foreground">
-                                  {row.memberCode ?? "—"}
+                                  {row.memberId ?? "—"}
                                   {slotTimeOf(row) ? ` · ${slotTimeOf(row)}` : ""}
                                 </p>
                               </div>

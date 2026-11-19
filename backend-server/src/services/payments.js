@@ -81,7 +81,7 @@ export async function createPaymentRow(input, session = null) {
       entity: "payment_records",
       entityId: String(row._id),
       action: "create",
-      newValues: { receiptNo, amount: row.amount, method, status, memberCode: member.memberCode },
+      newValues: { receiptNo, amount: row.amount, method, status },
     },
     session,
   );
@@ -96,7 +96,7 @@ export async function createPaymentRow(input, session = null) {
 export async function getDuesRows(gymId) {
   const [memberships, members, plans, payments] = await Promise.all([
     MemberMembership.find({ gymId, status: { $ne: "cancelled" } }).lean(),
-    Member.find({ gymId }).select("fullName memberCode").lean(),
+    Member.find({ gymId }).select("fullName").lean(),
     MembershipPlan.find({ gymId }).select("name").lean(),
     PaymentRecord.find({ gymId, status: { $in: ["paid", "partial"] } })
       .select("membershipId amount")
@@ -122,7 +122,6 @@ export async function getDuesRows(gymId) {
     if (balance <= 0) continue;
     rows.push({
       memberId: String(member._id),
-      memberCode: member.memberCode,
       memberName: member.fullName,
       membershipId: String(membership._id),
       planName: planById.get(String(membership.planId))?.name ?? "Plan",

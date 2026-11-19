@@ -146,7 +146,7 @@ export function StudentSearchBox({ className }) {
         <Input ref={inputRef} value={query} onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
-        }} onFocus={() => setOpen(true)} onKeyDown={handleKeyDown} placeholder="Search students by name, phone or ID…" className="h-9 rounded-md border-0 bg-transparent pr-4 pl-10 text-sm text-foreground shadow-none placeholder:text-muted-foreground focus-visible:border-0 focus-visible:ring-0 md:text-sm" role="combobox" aria-expanded={showDropdown} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={activeDescendant} aria-label="Search students" autoComplete="off"/>
+        }} onFocus={() => setOpen(true)} onKeyDown={handleKeyDown} placeholder="Search students by name, phone or MongoDB ID…" className="h-9 rounded-md border-0 bg-transparent pr-4 pl-10 text-sm text-foreground shadow-none placeholder:text-muted-foreground focus-visible:border-0 focus-visible:ring-0 md:text-sm" role="combobox" aria-expanded={showDropdown} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={activeDescendant} aria-label="Search students" autoComplete="off"/>
       </form>
       {showDropdown ? (<div className="absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-km-gold/25 bg-background shadow-xl">
           {/* Loading bar — thin gold shimmer across the top. */}
@@ -174,7 +174,7 @@ export function StudentSearchBox({ className }) {
                       {member.fullName}
                     </span>
                     <span className="mt-0.5 flex items-center gap-1.5 text-[11px] leading-tight text-muted-foreground">
-                      <span className="truncate font-medium text-km-gold/90">{member.memberCode}</span>
+                      <span className="truncate font-medium text-km-gold/90">{member.id}</span>
                       {member.phone ? (<>
                           <span aria-hidden="true">·</span>
                           <PhoneIcon className="size-3 shrink-0"/>

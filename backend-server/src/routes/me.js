@@ -154,11 +154,9 @@ const gymCheckinSchema = z.object({
 /**
  * POST /api/me/checkin-gym { token, lat?, lng? } → { status, message, attendance?, member? }
  *
- * Scan-the-wall-QR flow: the studio's shared QR opens the login page; once the
- * student is signed in, the app calls this to mark their attendance. Check-in
- * ONLY (never checks out) and the same eligibility / duplicate / cooldown rules
- * apply as a normal scan. The token must be the STUDIO's shared QR — a member's
- * personal QR never passes here.
+ * Explicit check-in action for clients using the signed-in QR flow. Merely
+ * opening the login page or student portal never records attendance. Check-in
+ * ONLY (never checks out); the token must be the STUDIO's shared QR.
  */
 router.post(
   "/checkin-gym",
@@ -214,7 +212,7 @@ router.post(
           : result.autoMarked && result.autoMarkedCount > 1
             ? `Student arrived — ${result.autoMarkedCount} classes`
             : "Student checked in",
-        body: `${member.fullName} (${member.memberCode}) checked in via the studio QR.${slotsInfo}`,
+        body: `${member.fullName} checked in via the studio QR.${slotsInfo}`,
         severity: "success",
         isRead: false,
         dedupeKey: null,

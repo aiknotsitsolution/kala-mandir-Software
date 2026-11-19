@@ -82,7 +82,7 @@ export function MembershipPass({ profile }) {
                   {me?.fullName ?? "Student"}
                 </p>
                 <p className="truncate font-mono text-[11px] tracking-wide text-paper-foreground/70">
-                  {me?.memberCode ?? "—"}
+                  {me?.id ?? "—"}
                   {membership?.planName ? ` · ${membership.planName}` : ""}
                 </p>
               </div>

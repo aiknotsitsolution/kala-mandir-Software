@@ -1,45 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "motion/react";
-import { toast } from "sonner";
 import { EyeIcon, EyeOffIcon, Loader2Icon, LockKeyholeIcon, Music2Icon, QrCodeIcon, } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/auth/AuthProvider";
-import { getDataService } from "@/data";
-import { getCurrentCoords } from "@/lib/geo";
 import { GYM_CHECKIN_PARAM } from "@/lib/qr";
 import { loginSchema } from "@/lib/validation";
-
-/**
- * Mark attendance for a signed-in member who arrived via the studio QR link.
- * Best-effort GPS first (only when the gym enforces a range), then the server
- * re-validates eligibility/cooldown. Resolves to the CheckInResult.
- */
-async function selfCheckIn(data, token) {
-    let coords = null;
-    try {
-        const gym = await data.getGymFresh();
-        if (gym?.locationRequired)
-            coords = await getCurrentCoords();
-    }
-    catch {
-        /* best effort — the server explains if a location fix is required */
-    }
-    return data.checkinGym(token, coords);
-}
-
-/** Full-screen state shown while a scanned QR is being checked in. */
-function MarkingAttendance() {
-    return (<div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
-      <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent"/>
-      <p className="text-sm">Marking your attendance…</p>
-    </div>);
-}
 
 // Local generated hero (palace scene with two classical dancers). If it fails
 // to load we fall back to a burgundy arch backdrop — never a broken image.
@@ -76,33 +47,10 @@ export function LoginPage() {
     const [heroFailed, setHeroFailed] = useState(false);
     // Set when the page was opened by scanning the studio's shared QR.
     const checkinToken = useMemo(() => new URLSearchParams(location.search).get(GYM_CHECKIN_PARAM), [location.search]);
-    const isMember = session?.profile.role === "member";
-    const needsCheckin = Boolean(checkinToken) && isMember;
-    const [checkinState, setCheckinState] = useState("idle"); // idle | working | done
-    const startedRef = useRef(false);
     const from = location.state?.from ?? "/";
-    useEffect(() => {
-        if (!needsCheckin || startedRef.current)
-            return;
-        startedRef.current = true;
-        setCheckinState("working");
-        void (async () => {
-            try {
-                const result = await selfCheckIn(getDataService(session), checkinToken);
-                if (result?.status === "ok")
-                    toast.success(result.message ?? "Attendance marked.");
-                else
-                    toast.info(result?.message ?? "Attendance was not marked.");
-            }
-            catch (err) {
-                toast.error(err instanceof Error ? err.message : "Unable to mark attendance.");
-            }
-            finally {
-                setCheckinState("done");
-                navigate("/portal", { replace: true });
-            }
-        })();
-    }, [needsCheckin, session, checkinToken, navigate]);
+    const portalCheckinUrl = checkinToken
+        ? `/portal?${GYM_CHECKIN_PARAM}=${encodeURIComponent(checkinToken)}`
+        : null;
     const { register, handleSubmit, formState: { errors, isSubmitting }, } = useForm({
         resolver: zodResolver(loginSchema),
         defaultValues: {
@@ -111,41 +59,9 @@ export function LoginPage() {
             password: "",
         },
     });
-    // Already signed in as a member who scanned the studio QR → mark and go to
-    // the portal (and drop the ?checkin= query so a refresh can't re-fire it).
-    useEffect(() => {
-        if (!needsCheckin || checkinState !== "idle")
-            return;
-        setCheckinState("working");
-        let cancelled = false;
-        void (async () => {
-            try {
-                const result = await selfCheckIn(getDataService(session), checkinToken);
-                if (cancelled)
-                    return;
-                if (result?.status === "ok")
-                    toast.success(result.message ?? "Attendance marked.");
-                else
-                    toast.info(result?.message ?? "Attendance was not marked.");
-            }
-            catch (err) {
-                if (!cancelled)
-                    toast.error(err instanceof Error ? err.message : "Unable to mark attendance.");
-            }
-            finally {
-                if (!cancelled) {
-                    setCheckinState("done");
-                    navigate("/portal", { replace: true });
-                }
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [needsCheckin, checkinState, session, checkinToken, navigate]);
     if (!loading && session) {
-        if (needsCheckin && checkinState !== "done")
-            return <MarkingAttendance />;
+        if (portalCheckinUrl && session.profile.role === "member")
+            return <Navigate to={portalCheckinUrl} replace/>;
         return <Navigate to={from} replace/>;
     }
     const onSubmit = handleSubmit(async (values) => {
@@ -153,17 +69,16 @@ export function LoginPage() {
         try {
             // One endpoint for everyone — the server resolves the role from the
             // database and the router sends staff to the dashboard, members to
-            // their portal. Sign in with an email / Student ID or a mobile number.
+            // their portal. Sign in with email, MongoDB ID or a mobile number.
             const next = await signIn({
                 identifier: values.identifier,
                 phone: values.phone,
                 password: values.password,
             });
-            // Scanned the studio QR? The ?checkin= effect above marks attendance
-            // and redirects to the portal once the member session lands.
-            if (checkinToken && next?.profile.role === "member")
-                return;
-            navigate(from, { replace: true });
+            const target = portalCheckinUrl && next?.profile.role === "member"
+                ? portalCheckinUrl
+                : from;
+            navigate(target, { replace: true });
         }
         catch (error) {
             setServerError(error instanceof Error ? error.message : "Sign in failed.");
@@ -269,7 +184,7 @@ export function LoginPage() {
               <QrCodeIcon className="size-4 text-km-gold"/>
               <AlertTitle>Studio QR scanned</AlertTitle>
               <AlertDescription>
-                Sign in to mark your attendance for today.
+                Sign in, then confirm attendance in your student portal. Scanning alone does not mark attendance.
               </AlertDescription>
             </Alert>) : null}
 
@@ -281,8 +196,8 @@ export function LoginPage() {
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
             <div className="space-y-2">
-              <Label htmlFor="identifier">Student ID / Email</Label>
-              <Input id="identifier" type="text" autoComplete="username" placeholder="you@gmail.com or KD-0007" {...register("identifier")}/>
+              <Label htmlFor="identifier">MongoDB ID / Email</Label>
+              <Input id="identifier" type="text" autoComplete="username" placeholder="Email or 24-character MongoDB ID" {...register("identifier")}/>
               {errors.identifier ? <p className="text-xs text-destructive">{errors.identifier.message}</p> : null}
             </div>
 
@@ -317,7 +232,7 @@ export function LoginPage() {
           </form>
 
           <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
-            Staff and students sign in here with email, Student ID or mobile number.
+            Staff and students sign in here with email, MongoDB ID or mobile number.
             Student accounts are created at the front desk — no self-registration.
           </p>
         </motion.div>

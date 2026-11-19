@@ -54,9 +54,9 @@ describe("AttendancePage tabs and data loading", () => {
                 weekdays: [new Date().getDay()],
             }]),
             listAllMembers: vi.fn(async () => [
-                { id: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", status: "active" },
-                { id: "m2", fullName: "Riya Shah", memberCode: "KM-002", status: "active" },
-                { id: "m3", fullName: "Inactive Student", memberCode: "KM-003", status: "inactive" },
+                { id: "m1", fullName: "Asha Kapoor", status: "active" },
+                { id: "m2", fullName: "Riya Shah", status: "active" },
+                { id: "m3", fullName: "Inactive Student", status: "inactive" },
             ]),
             listAttendance: vi.fn(async () => ({
                 items: [{ id: "a1", memberId: "m1", attendanceStatus: "present" }],
@@ -66,8 +66,8 @@ describe("AttendancePage tabs and data loading", () => {
             })),
             getClassRoster: vi.fn(async () => ({
                 students: [
-                    { memberId: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", enrolled: true, trainerName: "Maya Joshi", attendanceStatus: "present" },
-                    { memberId: "m2", fullName: "Riya Shah", memberCode: "KM-002", enrolled: false, trainerName: "Neha Shah", attendanceStatus: "absent" },
+                    { memberId: "m1", fullName: "Asha Kapoor", enrolled: true, trainerName: "Maya Joshi", attendanceStatus: "present" },
+                    { memberId: "m2", fullName: "Riya Shah", enrolled: false, trainerName: "Neha Shah", attendanceStatus: "absent" },
                 ],
             })),
         });
@@ -141,7 +141,6 @@ describe("AttendancePage tabs and data loading", () => {
             students: Array.from({ length: 25 }, (_, index) => ({
                 memberId: `m${index + 1}`,
                 fullName: `Student ${index + 1}`,
-                memberCode: `KM-${String(index + 1).padStart(3, "0")}`,
                 enrolled: true,
             })),
         }));
@@ -160,7 +159,6 @@ describe("AttendancePage tabs and data loading", () => {
         mockData.listAllMembers = vi.fn(async () => Array.from({ length: 25 }, (_, index) => ({
             id: `m${index + 1}`,
             fullName: `Student ${String(index + 1).padStart(2, "0")}`,
-            memberCode: `KM-${String(index + 1).padStart(3, "0")}`,
             status: "active",
         })));
         mockData.listAttendance = vi.fn(async ({ page, pageSize }) => ({
@@ -202,7 +200,6 @@ describe("AttendancePage tabs and data loading", () => {
             id: `a${index + 1}`,
             memberId: `m${index + 1}`,
             memberName: `Student ${index + 1}`,
-            memberCode: `KM-${String(index + 1).padStart(3, "0")}`,
             attendanceStatus: "present",
         }));
         mockData.listAttendance = vi.fn(async ({ page, pageSize }) => ({
@@ -224,12 +221,12 @@ describe("AttendancePage tabs and data loading", () => {
     it("searches attendance history and exports only matching records to CSV", async () => {
         const user = userEvent.setup();
         const records = [
-            { id: "a1", memberId: "m1", memberName: "Asha Kapoor", memberCode: "KM-001", status: "checked_in", checkIn: "2026-11-18T09:00:00.000Z", method: "qr" },
-            { id: "a2", memberId: "m2", memberName: "Riya Shah", memberCode: "KM-002", status: "checked_in", checkIn: "2026-11-18T10:00:00.000Z", method: "manual" },
+            { id: "a1", memberId: "m1", memberName: "Asha Kapoor", status: "checked_in", checkIn: "2026-11-18T09:00:00.000Z", method: "qr" },
+            { id: "a2", memberId: "m2", memberName: "Riya Shah", status: "checked_in", checkIn: "2026-11-18T10:00:00.000Z", method: "manual" },
         ];
         mockData.listAttendance = vi.fn(async ({ page, pageSize, search }) => {
             const matchingRecords = records.filter((record) => !search ||
-                `${record.memberName} ${record.memberCode}`.toLowerCase().includes(search.toLowerCase()));
+                `${record.memberName} ${record.memberId}`.toLowerCase().includes(search.toLowerCase()));
             return {
                 items: matchingRecords.slice((page - 1) * pageSize, page * pageSize),
                 total: matchingRecords.length,

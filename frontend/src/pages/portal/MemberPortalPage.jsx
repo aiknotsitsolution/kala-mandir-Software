@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BellIcon, QrCodeIcon } from "lucide-react";
 import { Skeleton, ErrorState } from "@/components/shared/States";
 import { useAuth, useData } from "@/auth/AuthProvider";
@@ -12,6 +13,7 @@ import { StatsTickets } from "./StatsTickets";
 import { ClassTickets } from "./ClassTickets";
 import { VisitCalendar } from "./VisitCalendar";
 import { ReceiptStubs } from "./ReceiptStubs";
+import { GYM_CHECKIN_PARAM } from "@/lib/qr";
 
 /** A visit counts at most 12h so a forgotten check-out cannot skew totals. */
 const MAX_VISIT_MS = 12 * 3_600_000;
@@ -80,6 +82,9 @@ export function MemberPortalPage() {
     const { session } = useAuth();
     const [scanOpen, setScanOpen] = useState(false);
     const [scanBump, setScanBump] = useState(0);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const pendingGymToken = searchParams.get(GYM_CHECKIN_PARAM);
+    const scanDialogOpen = scanOpen || Boolean(pendingGymToken);
     const profile = useAsync(() => data.getMyMemberProfile(), [data]);
     const attendance = useAsync(() => data.listMyAttendance(60), [data, scanBump]);
     const classes = useAsync(() => data.listMyClasses(), [data]);
@@ -91,6 +96,14 @@ export function MemberPortalPage() {
     const todayLabel = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     const stats = computeVisitStats(attendance.data ?? []);
     const quota = me?.quota ?? null;
+    const handleScanDialogOpenChange = (open) => {
+        setScanOpen(open);
+        if (!open && pendingGymToken) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete(GYM_CHECKIN_PARAM);
+            setSearchParams(nextParams, { replace: true });
+        }
+    };
 
     return (<div className="space-y-10 pb-6">
       {/* ---------- greeting + timer + scan ---------- */}
@@ -117,7 +130,12 @@ export function MemberPortalPage() {
         </header>
       </Settle>
 
-      <ScanGymQrDialog open={scanOpen} onOpenChange={setScanOpen} onScanDone={() => setScanBump((n) => n + 1)}/>
+      <ScanGymQrDialog
+        open={scanDialogOpen}
+        initialToken={pendingGymToken}
+        onOpenChange={handleScanDialogOpenChange}
+        onScanDone={() => setScanBump((n) => n + 1)}
+      />
 
       {/* ---------- hero: 3D membership pass ---------- */}
       <Settle delay={0.08} rotate={0}>

@@ -35,7 +35,7 @@ export function ReceiptDialog({ payment, gym, onOpenChange, }) {
             <dl className="space-y-2 border-t border-dashed border-border/80 pt-3 text-sm">
               <Row label="Student">
                 <span className="font-medium">{payment.memberName ?? "Student"}</span>
-                {payment.memberCode ? (<span className="ml-1.5 font-mono text-xs text-muted-foreground">{payment.memberCode}</span>) : null}
+                {payment.memberId ? (<span className="ml-1.5 font-mono text-xs text-muted-foreground">{payment.memberId}</span>) : null}
               </Row>
               {payment.membershipSummary ? <Row label="Membership">{payment.membershipSummary}</Row> : null}
               <Row label="Method">{PAYMENT_METHOD_LABELS[payment.method]}</Row>

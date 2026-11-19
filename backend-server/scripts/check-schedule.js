@@ -16,10 +16,10 @@ const upcoming = await GymClass.find({ status: "scheduled", startsAt: { $gte: ne
 console.log(`\nNext ${upcoming.length} scheduled classes:`);
 for (const c of upcoming) console.log(`  ${c.startsAt.toISOString().slice(0, 16).replace("T", " ")}  ${c.name} (${c.durationMinutes}m, cap ${c.capacity})`);
 
-const students = await Member.find({}).select("memberCode fullName email").sort({ memberCode: 1 }).lean();
+const students = await Member.find({}).select("fullName email").sort({ _id: 1 }).lean();
 console.log(`\nFirst 3 / last student:`);
-console.log(`  ${students[0].memberCode} ${students[0].fullName} ${students[0].email}`);
-console.log(`  ${students[1].memberCode} ${students[1].fullName} ${students[1].email}`);
-console.log(`  ${students.at(-1).memberCode} ${students.at(-1).fullName} ${students.at(-1).email}`);
+console.log(`  ${students[0]._id} ${students[0].fullName} ${students[0].email}`);
+console.log(`  ${students[1]._id} ${students[1].fullName} ${students[1].email}`);
+console.log(`  ${students.at(-1)._id} ${students.at(-1).fullName} ${students.at(-1).email}`);
 
 await disconnectDb();

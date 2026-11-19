@@ -15,8 +15,8 @@ vi.mock("@/auth/AuthProvider", () => ({
 }));
 
 const members = [
-    { id: "m1", fullName: "Asha Kapoor", memberCode: "KM-001", status: "active", effectiveStatus: "active" },
-    { id: "m2", fullName: "Riya Shah", memberCode: "KM-002", status: "active", effectiveStatus: "expired" },
+    { id: "m1", fullName: "Asha Kapoor", status: "active", effectiveStatus: "active" },
+    { id: "m2", fullName: "Riya Shah", status: "active", effectiveStatus: "expired" },
 ];
 const statusCounts = {
     all: 2,

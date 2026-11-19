@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;
 
-/** Named monotonic counters (member codes, receipt numbers). */
+/** Named monotonic counters (currently receipt numbers). */
 const CounterSchema = new Schema(
   {
     key: { type: String, required: true, unique: true },

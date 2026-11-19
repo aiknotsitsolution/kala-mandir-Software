@@ -29,7 +29,7 @@ export const dateOnlySchema = z
 export const memberFormSchema = z
     .object({
     fullName: z.string().trim().min(2, "Name must be at least 2 characters").max(120),
-    // Optional: students can sign in with their printed Student ID instead.
+    // Optional: students can sign in with their MongoDB member ID instead.
     email: z
         .string()
         .trim()
@@ -210,7 +210,7 @@ export const renewalFormSchema = z.object({
     notes: z.string().trim().max(500).optional(),
 });
 export const manualCheckInSchema = z.object({
-    memberCode: z.string().trim().min(2, "Enter a Student ID or phone number"),
+    memberId: z.string().trim().regex(/^[a-f\d]{24}$/i, "Enter a valid MongoDB student ID"),
 });
 export const settingsFormSchema = z.object({
     gymName: z.string().trim().min(2, "Institute name is required").max(120),
@@ -231,18 +231,25 @@ export const settingsFormSchema = z.object({
 });
 export const loginSchema = z
     .object({
-    /** Email address OR printed Student ID (e.g. KD-0007). */
+    /** Email address OR MongoDB member ID. */
     identifier: z.string().trim().max(254).optional().or(z.literal("")),
     /** Mobile number — an alternative to the identifier (no OTP needed). */
     phone: z.string().trim().optional().or(z.literal("")),
     password: z.string().min(6, "Password must be at least 6 characters"),
 })
     .superRefine((data, ctx) => {
+    if (data.identifier && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.identifier) && !/^[a-f\d]{24}$/i.test(data.identifier)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["identifier"],
+            message: "Enter a valid email address or MongoDB student ID",
+        });
+    }
     if (!data.identifier && !data.phone) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["identifier"],
-            message: "Enter your email, Student ID or mobile number",
+            message: "Enter your email, MongoDB student ID or mobile number",
         });
     }
     if (data.phone) {

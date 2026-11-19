@@ -199,7 +199,7 @@ export function ViewAttendancePage({ hideHeader = false }) {
                 }
                 downloadCsv(`attendance-${mode}-${periodLabel.replace(/\s+/g, "-").toLowerCase()}`, toCsv(collected, [
                     { header: "Student", accessor: (row) => row.memberName ?? "" },
-                    { header: "Student ID", accessor: (row) => row.memberCode ?? "" },
+                    { header: "MongoDB ID", accessor: (row) => row.memberId ?? "" },
                     { header: "Plan", accessor: (row) => row.planName ?? "" },
                     { header: "Check-in", accessor: (row) => formatDateTime(row.checkIn) },
                     { header: "Check-out", accessor: (row) => (row.checkOut ? formatDateTime(row.checkOut) : "") },
@@ -357,7 +357,7 @@ export function ViewAttendancePage({ hideHeader = false }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{row.memberName}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {row.memberCode} · planned {row.plannedHours}h/day{row.stillInside ? " · still inside" : ""}
+                      {row.memberId} · planned {row.plannedHours}h/day{row.stillInside ? " · still inside" : ""}
                     </p>
                   </div>
                   <span className="font-mono text-sm font-semibold tabular-nums text-warning">
@@ -411,7 +411,7 @@ export function ViewAttendancePage({ hideHeader = false }) {
                               {record.memberName ?? "Student"}
                             </Link>
                             <p className="truncate text-xs text-muted-foreground">
-                              {record.memberCode ?? "—"}
+                              {record.memberId ?? "—"}
                             </p>
                           </div>
                         </div>

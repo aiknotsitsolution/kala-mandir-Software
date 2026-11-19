@@ -413,7 +413,7 @@ router.post(
       entity: "slot_enrollments",
       entityId: String(row._id),
       action: "enroll",
-      newValues: { slot: slot.name, memberCode: member.memberCode },
+      newValues: { slot: slot.name },
     });
 
     res.status(201).json(toSlotEnrollment(row, member));

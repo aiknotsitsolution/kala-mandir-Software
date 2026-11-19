@@ -93,7 +93,6 @@ export function toMember(doc) {
   return {
     id: id(doc._id),
     gymId: id(doc.gymId),
-    memberCode: doc.memberCode,
     fullName: doc.fullName,
     email: doc.email ?? null,
     phone: doc.phone,
@@ -226,7 +225,6 @@ export function toAttendance(doc, memberDoc, scannerDoc) {
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
     memberName: memberDoc?.fullName ?? undefined,
-    memberCode: memberDoc?.memberCode ?? undefined,
     memberPhoto: memberDoc?.photoUrl ?? null,
     scannerName: scannerDoc?.fullName ?? null,
   };
@@ -255,7 +253,6 @@ export function toPayment(doc, memberDoc, membershipDoc, planDoc) {
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
     memberName: memberDoc?.fullName ?? "—",
-    memberCode: memberDoc?.memberCode ?? "—",
     membershipSummary,
   };
 }
@@ -314,7 +311,6 @@ export function toEnrollment(doc, memberDoc) {
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
     memberName: memberDoc?.fullName ?? undefined,
-    memberCode: memberDoc?.memberCode ?? undefined,
     memberPhoto: memberDoc?.photoUrl ?? null,
   };
 }
@@ -358,7 +354,6 @@ export function toSlotEnrollment(doc, memberDoc) {
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
     memberName: memberDoc?.fullName ?? undefined,
-    memberCode: memberDoc?.memberCode ?? undefined,
     memberPhoto: memberDoc?.photoUrl ?? null,
   };
 }

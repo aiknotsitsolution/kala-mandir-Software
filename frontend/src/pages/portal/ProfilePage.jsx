@@ -103,7 +103,7 @@ export function ProfilePage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-lg font-semibold tracking-tight">{me?.fullName ?? "Student"}</p>
                     <p className="truncate font-mono text-xs tracking-wide text-muted-foreground">
-                      {me?.memberCode ?? "—"}
+                      {me?.id ?? "—"}
                       {membership?.planName ? ` · ${membership.planName}` : ""}
                     </p>
                   </div>

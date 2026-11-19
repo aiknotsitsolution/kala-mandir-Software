@@ -76,10 +76,11 @@ router.get(
     const search = String(req.query.search ?? "").trim();
     if (search) {
       const rx = new RegExp(escapeRegExp(search), "i");
-      const members = await Member.find({
-        gymId,
-        $or: [{ fullName: rx }, { memberCode: rx }],
-      })
+      const members = await Member.find(
+        Types.ObjectId.isValid(search)
+          ? { gymId, _id: new Types.ObjectId(search) }
+          : { gymId, fullName: rx },
+      )
         .select("_id")
         .lean();
       filter.$or = [

@@ -31,7 +31,7 @@ export const REJECTION_MESSAGES = {
   cooldown: "Please wait a bit before checking in again.",
   duplicate: "Duplicate scan — this check-in was already recorded.",
   forbidden: "This student belongs to a different studio.",
-  not_found: "No student matches this student code.",
+  not_found: "No matching student was found.",
   network: "Network error.",
   server_error: "Server error.",
 };
@@ -39,7 +39,6 @@ export const REJECTION_MESSAGES = {
 function memberSummary(member, membership = null, planDoc = null, effective = null) {
   return {
     id: String(member._id),
-    memberCode: member.memberCode,
     fullName: member.fullName,
     photoUrl: member.photoUrl ?? null,
     planName: planDoc?.name ?? null,
@@ -69,7 +68,7 @@ async function rejected(session, reason, member = null, membership = null, extra
  * @param {object} params
  * @param {string} params.gymId   caller's gym (tenancy)
  * @param {string} params.actorId authenticated user id (scanner)
- * @param {{token?: string, code?: string}} params.lookup token XOR member code
+ * @param {{token?: string, memberId?: string}} params.lookup
  * @param {"qr"|"manual"|"class"} params.method
  * @param {string|null} params.notes
  * @param {object} params.ctx { settings, tz, now, expiringSoonDays }
@@ -82,15 +81,16 @@ export async function runCheckIn({ gymId, actorId, lookup, method = "qr", notes 
   await autoCheckoutDueAttendance({ gymId, now });
 
   return withTransaction(async (session) => {
-    // 1. Resolve member by opaque token or member code.
+    // 1. Resolve member by personal QR token or MongoDB member ID.
     let member;
     if (lookup.token) {
       member = await Member.findOne({ qrToken: lookup.token }).session(session);
       if (!member) return rejected(session, "invalid_qr");
-    } else {
-      member = await Member.findOne({ gymId, memberCode: String(lookup.code).trim().toUpperCase() })
-        .session(session);
+    } else if (lookup.memberId) {
+      member = await Member.findOne({ _id: lookup.memberId, gymId }).session(session);
       if (!member) return rejected(session, "not_found");
+    } else {
+      return rejected(session, "not_found");
     }
 
     // 2. Tenancy check: caller's gym must match the member's gym.
@@ -99,8 +99,8 @@ export async function runCheckIn({ gymId, actorId, lookup, method = "qr", notes 
     // 3. Per-member lock — serialises concurrent scans of the same member.
     await Member.updateOne({ _id: member._id }, { $inc: { scanLock: 1 } }, { session });
 
-    // A revoked token keeps its value so scanners can tell revoked vs invalid.
-    if (member.qrStatus !== "active") return rejected(session, "revoked_qr", member);
+    // QR revocation applies to that member's personal token, not the shared gym QR.
+    if (lookup.token && member.qrStatus !== "active") return rejected(session, "revoked_qr", member);
 
     // 4. Member active? (rejection order: inactive first)
     if (member.status !== "active") return rejected(session, "member_inactive", member);
@@ -175,7 +175,7 @@ export async function runCheckIn({ gymId, actorId, lookup, method = "qr", notes 
         entity: "attendance_records",
         entityId: String(attendance._id),
         action: "create",
-        newValues: { memberCode: member.memberCode, method, checkIn: now.toISOString() },
+        newValues: { method, checkIn: now.toISOString() },
       },
       session,
     );

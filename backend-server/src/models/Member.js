@@ -6,7 +6,6 @@ const { Schema, model } = mongoose;
 const MemberSchema = new Schema(
   {
     gymId: { type: Schema.Types.ObjectId, ref: "Gym", required: true },
-    memberCode: { type: String, required: true },
     fullName: { type: String, required: true, trim: true },
     email: { type: String, default: null, lowercase: true, trim: true },
     phone: { type: String, required: true, trim: true },
@@ -47,14 +46,12 @@ const MemberSchema = new Schema(
   { timestamps: true, versionKey: false, collection: "members" },
 );
 
-// Case-insensitive duplicate prevention per gym (mirrors the Postgres indexes).
-MemberSchema.index({ gymId: 1, memberCode: 1 }, { unique: true });
 MemberSchema.index({ gymId: 1, phone: 1 }, { unique: true });
 MemberSchema.index(
   { gymId: 1, email: 1 },
   { unique: true, partialFilterExpression: { email: { $type: "string" } } },
 );
 MemberSchema.index({ gymId: 1, status: 1 });
-MemberSchema.index({ fullName: "text", phone: "text", email: "text", memberCode: "text" });
+MemberSchema.index({ fullName: "text", phone: "text", email: "text" });
 
 export default model("Member", MemberSchema);

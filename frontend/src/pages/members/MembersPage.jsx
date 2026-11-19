@@ -253,7 +253,7 @@ export function MembersPage() {
         {/* Search */}
         <div className="relative min-w-0 flex-1">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"/>
-          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone or Student ID…" className="h-9 border-km-gold/25 bg-background/60 pl-9 focus-visible:border-km-gold" aria-label="Search students"/>
+          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone or MongoDB ID…" className="h-9 border-km-gold/25 bg-background/60 pl-9 focus-visible:border-km-gold" aria-label="Search students"/>
         </div>
 
         {/* Filters */}
@@ -344,7 +344,7 @@ export function MembersPage() {
                                 {member.fullName}
                               </Link>
                               <span className="flex items-center gap-1">
-                                <p className="truncate text-[11px] text-muted-foreground sm:text-xs">{member.memberCode}</p>
+                                <p className="truncate text-[11px] text-muted-foreground sm:text-xs">{member.id}</p>
                                 {/* Mobile-only: the Status column is hidden below sm,
                                     so the status rides along beside the ID. */}
                                 <span className="sm:hidden">

@@ -35,7 +35,7 @@ export async function quotaForMembership(membership, session = null) {
 }
 
 function quotaNotificationSpec(member, membership, quotaState) {
-  const who = `${member.fullName} (${member.memberCode})`;
+  const who = member.fullName;
   const link = `/members/${member._id}`;
   const period = String(membership._id);
   const specs = [];

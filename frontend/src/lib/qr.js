@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 /**
  * QR identity helpers.
  *
- * The QR payload carries ONLY an opaque random token — never a Student ID, name
+ * The QR payload carries ONLY an opaque random token — never a MongoDB ID, name
  * or any personal data. The database stores that opaque token and resolves it
  * server-side (`record_attendance` RPC), which re-validates membership state
  * and cooldown before writing anything.

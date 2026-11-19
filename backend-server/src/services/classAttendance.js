@@ -55,7 +55,6 @@ function memberSummary(member, membership, planDoc, quota)
 {
   return {
     id: String(member._id),
-    memberCode: member.memberCode,
     fullName: member.fullName,
     photoUrl: member.photoUrl ?? null,
     status: member.status,
@@ -114,7 +113,7 @@ async function trainerProfile(gymId, actorRole, actorId)
  * @param {string} params.actorRole  "owner"|"admin"|"front_desk"|"trainer"
  * @param {string} params.slotId     ClassSlot id
  * @param {string} params.date       "YYYY-MM-DD" (defaults to today in tz)
- * @param {{token?: string, code?: string}} params.lookup token XOR member code
+ * @param {{token?: string, memberId?: string}} params.lookup
  * @param {"qr"|"manual"|"class"} params.method
  * @param {string|null} params.notes
  * @param {object} params.ctx        { tz, settings, now, expiringSoonDays }
@@ -179,7 +178,7 @@ export async function markSlotAttendance({
       return rejected("not_a_slot_day", { weekday, slotWeekdays: slot.weekdays }, null, null, null, session);
     }
 
-    // 4. Resolve member by opaque token, id, or member code.
+    // 4. Resolve member by opaque token or MongoDB ID.
     let member;
     if (lookup?.token)
     {
@@ -189,12 +188,7 @@ export async function markSlotAttendance({
     {
       member = await Member.findOne({ _id: lookup.memberId, gymId }).session(session);
       if (!member) return rejected("not_found", {}, null, null, null, session);
-    } else
-    {
-      member = await Member.findOne({ gymId, memberCode: String(lookup?.code ?? "").trim().toUpperCase() })
-        .session(session);
-      if (!member) return rejected("not_found", {}, null, null, null, session);
-    }
+    } else return rejected("not_found", {}, null, null, null, session);
 
     // 5. Tenancy.
     if (String(member.gymId) !== String(gymId)) return rejected("forbidden", {}, null, null, null, session);
@@ -292,7 +286,6 @@ export async function markSlotAttendance({
         entityId: String(attendance._id),
         action: "create_class_attendance",
         newValues: {
-          memberCode: member.memberCode,
           slot: slot.name,
           date: dayKey,
           method,
@@ -360,12 +353,7 @@ export async function markDemoAttendance({
     {
       member = await Member.findOne({ _id: lookup.memberId, gymId }).session(session);
       if (!member) return rejected("not_found", {}, null, null, null, session);
-    } else
-    {
-      member = await Member.findOne({ gymId, memberCode: String(lookup?.code ?? "").trim().toUpperCase() })
-        .session(session);
-      if (!member) return rejected("not_found", {}, null, null, null, session);
-    }
+    } else return rejected("not_found", {}, null, null, null, session);
     if (String(member.gymId) !== String(gymId)) return rejected("forbidden", {}, null, null, null, session);
 
     await Member.updateOne({ _id: member._id }, { $inc: { scanLock: 1 } }, { session });
@@ -423,7 +411,7 @@ export async function markDemoAttendance({
         entity: "attendance_records",
         entityId: String(attendance._id),
         action: "create_demo_attendance",
-        newValues: { memberCode: member.memberCode, className: klass.name, date: dayKey },
+        newValues: { className: klass.name, date: dayKey },
       },
       session,
     );
@@ -536,7 +524,6 @@ export async function markRosterAttendance({
       {
         return {
           memberId: String(member._id),
-          memberCode: member.memberCode,
           fullName: member.fullName,
           status: "rejected",
           reason: "no_membership",
@@ -650,7 +637,6 @@ export async function markRosterAttendance({
 
       return {
         memberId: String(member._id),
-        memberCode: member.memberCode,
         fullName: member.fullName,
         status: "ok",
         attendanceStatus: status,

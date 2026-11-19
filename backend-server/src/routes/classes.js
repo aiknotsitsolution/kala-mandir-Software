@@ -207,7 +207,7 @@ router.patch(
   }),
 );
 
-/** GET /api/classes/:id/enrollments → ClassEnrollment[] (memberName/memberCode populated) */
+/** GET /api/classes/:id/enrollments → ClassEnrollment[] (memberName populated) */
 router.get(
   "/classes/:id/enrollments",
   requireAuth,
@@ -274,7 +274,7 @@ router.post(
       entity: "class_enrollments",
       entityId: String(row._id),
       action: "create",
-      newValues: { class: cls.name, memberCode: member.memberCode },
+      newValues: { class: cls.name },
     });
 
     res.status(201).json(toEnrollment(row, member));

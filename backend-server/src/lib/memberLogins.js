@@ -5,13 +5,13 @@ import User from "../models/User.js";
  * Member portal logins.
  *
  * Every gym member gets a `role: "member"` user so they can sign in with
- * their printed member code. The login uses a synthetic unique email (the
- * User model requires one) that is never exposed through the API.
+ * their MongoDB member ID. The login uses a synthetic unique email that is
+ * never exposed through the API.
  */
 export const MEMBER_DEFAULT_PASSWORD = process.env.MEMBER_DEFAULT_PASSWORD ?? "test@123";
 
-export function memberLoginEmail(gymId, memberCode) {
-  return `${String(gymId)}.${memberCode}`.toLowerCase() + "@members.kalamandir.local";
+export function memberLoginEmail(gymId, memberId) {
+  return `${String(gymId)}.${String(memberId)}`.toLowerCase() + "@members.kalamandir.local";
 }
 
 /**
@@ -19,7 +19,7 @@ export function memberLoginEmail(gymId, memberCode) {
  * Returns the created user, or null when one already existed.
  */
 export async function ensureMemberLogin(
-  { gymId, memberId, memberCode, fullName, phone, password },
+  { gymId, memberId, fullName, phone, password },
   session = null,
 ) {
   const existing = await User.findOne({ memberId, role: "member" })
@@ -35,7 +35,7 @@ export async function ensureMemberLogin(
         gymId,
         memberId,
         fullName,
-        email: memberLoginEmail(gymId, memberCode),
+        email: memberLoginEmail(gymId, memberId),
         phone: phone ?? null,
         passwordHash,
         role: "member",

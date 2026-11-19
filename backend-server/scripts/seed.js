@@ -302,8 +302,6 @@ function pushPayment(memberId, membershipId, amount, onDate, status = "paid", me
 
 for (let i = 0; i < STUDENT_COUNT; i += 1) {
     const id = makeIdentity(i);
-    const memberCode = `KD-${String(i + 1).padStart(4, "0")}`;
-
     // Join across the last ~15 months; newer members skew toward recent joins.
     const joinedDaysAgo = Math.round(Math.pow(rnd(), 1.4) * 460) + pickInt(0, 9);
     const joinDate = addDays(today, -joinedDaysAgo);
@@ -317,7 +315,6 @@ for (let i = 0; i < STUDENT_COUNT; i += 1) {
 
     const [member] = await Member.create([{
         gymId,
-        memberCode,
         fullName: id.fullName,
         email: id.email,
         phone: id.phone,
@@ -649,7 +646,6 @@ console.log(`Created ${attendanceCreates.length} attendance records (incl. today
 /* ------------------------------ counters ------------------------------ */
 
 await Counter.bulkWrite([
-    { updateOne: { filter: { key: `member_code:${gymId}` }, update: { $set: { seq: STUDENT_COUNT + 120 } }, upsert: true } },
     { updateOne: { filter: { key: `receipt_no:${gymId}` }, update: { $set: { seq: receiptSeq + 120 } }, upsert: true } },
 ]);
 
@@ -670,7 +666,7 @@ await AppNotification.insertMany([
     ...expiringSoon.map((c, i) => ({
         gymId, userId: adminId, memberId: c.member._id, type: "expiry_warning",
         title: "Membership expiring soon",
-        body: `${c.member.memberCode} — ${c.member.fullName}'s membership ends ${c.current.end}. Nudge for renewal.`,
+        body: `${c.member.fullName}'s membership ends ${c.current.end}. Nudge for renewal.`,
         severity: "warning", isRead: false, dedupeKey: `expiry-${i}`, link: "/members",
         createdAt: addDays(now, -0.4 - i * 0.2),
     })),

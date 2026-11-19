@@ -14,6 +14,7 @@
     "db:verify-logins": "node scripts/verify-logins.js",
     "db:verify-live": "node scripts/verify-live.js",
     "db:check-classes": "node scripts/check-classes.js",
+    "db:remove-member-code": "node scripts/remove-member-code.js",
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
