@@ -16,7 +16,7 @@ import SlotEnrollment from "../models/SlotEnrollment.js";
 import StaffProfile from "../models/StaffProfile.js";
 import { badRequest } from "../lib/errors.js";
 import { minutesInTz, parseDateOnly, ymdInTz } from "../lib/dates.js";
-import { toMinutes } from "../lib/schedule.js";
+import { isWithinSlotTime, toMinutes } from "../lib/schedule.js";
 import { parseQrPayload } from "../lib/qr.js";
 import { toAttendance } from "../lib/serialize.js";
 import { writeAudit } from "../lib/audit.js";
@@ -161,27 +161,38 @@ async function markExtraVisitAttendance({ gymId, member, actorId, ctx, now, dayK
   }
 }
 
-/** Scan-time batch window — "running window" rule:
- *  • A batch is auto-marked only while it is on air.
- *  • +15 min before start (student reached a bit early).
- *  • +60 min after end (late scan still counts that batch).
- *  Nothing else gets pre-marked — the 2 PM batch stays unmarked until the
- *  student actually walks into it (or the trainer marks it). */
-const SLOT_WINDOW_BEFORE_MIN = 15;
-const SLOT_WINDOW_AFTER_MIN = 60;
+/** The student's enrolled slots that are active at this exact studio-local time. */
+export async function getCurrentEnrolledSlots({ gymId, memberId, tz, now = new Date() }) {
+  const dayKey = ymdInTz(now, tz);
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  const nowMinutes = minutesInTz(now, tz);
+  const enrollments = await SlotEnrollment.find({ gymId, memberId, status: "enrolled" })
+    .select("slotId")
+    .lean();
 
-/** `HH:MM` from ClassSlot.startTime/endTime → minutes since midnight. */
-function slotMinutes(hhmm) {
-  const parts = String(hhmm ?? "").split(":").map(Number);
-  if (parts.length < 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) return NaN;
-  return parts[0] * 60 + parts[1];
+  if (enrollments.length === 0) return { dayKey, slots: [] };
+
+  const slots = await ClassSlot.find({
+    _id: { $in: enrollments.map((enrollment) => enrollment.slotId) },
+    gymId,
+    isActive: true,
+    weekdays: weekday,
+  })
+    .sort({ startTime: 1 })
+    .lean();
+
+  return {
+    dayKey,
+    slots: slots.filter((slot) => isWithinSlotTime(nowMinutes, slot.startTime, slot.endTime)),
+  };
 }
 
 /**
  * Best-effort automatic register marks for a studio QR check-in.
  *
  * RUNNING-WINDOW RULE: the scan marks ONLY the student's enrolled batches
- * that are on air right now (± the small pre/post grace above). A student
+ * that are active at the exact scan time. A student
  * with a 10–11 and a 2–3 batch scanning at 10:15 gets exactly ONE mark
  * (10–11, quota −1); the 2 PM batch stays unmarked until they walk into it,
  * so the admin filtering the afternoon slot at 10:30 does NOT see a phantom
@@ -199,38 +210,26 @@ function slotMinutes(hhmm) {
  *
  * @returns {{ attendance: object, count: number, slotNames: string[] } | null}
  */
-export async function autoMarkSlotAttendance({ gymId, member, actorId, ctx, now = new Date() }) {
+export async function autoMarkSlotAttendance({
+  gymId,
+  member,
+  actorId,
+  ctx,
+  now = new Date(),
+  currentSlots = null,
+}) {
   try {
     const tz = ctx.tz ?? "Asia/Kolkata";
-    // Weekday (0=Sun…6=Sat) of "now" in the studio timezone.
-    const dayKey = ymdInTz(now, tz);
-    const [y, m, d] = dayKey.split("-").map(Number);
-    const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
     const memberId = member._id ?? member.id ?? member;
-
-    // The student's batches only — no enrollment, no class marks.
-    const enrollments = await SlotEnrollment.find({ gymId, memberId, status: "enrolled" }).lean();
-    if (enrollments.length === 0) return null;
-    const slots = await ClassSlot.find({
-      _id: { $in: enrollments.map((e) => e.slotId) },
+    const activeSlots = currentSlots ?? (await getCurrentEnrolledSlots({
       gymId,
-      isActive: true,
-      weekdays: weekday,
-    })
-      .sort({ startTime: 1 })
-      .lean();
-    if (slots.length === 0) return null;
-
-    // RUNNING-WINDOW filter — only batches on air (± grace) are candidates.
-    const nowMinutes = minutesInTz(now, tz);
-    const inWindow = (slot) => {
-      const start = slotMinutes(slot.startTime);
-      const end = slotMinutes(slot.endTime);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
-      // Linear wrap assumption — dance batches don't run past midnight.
-      return nowMinutes >= start - SLOT_WINDOW_BEFORE_MIN && nowMinutes <= end + SLOT_WINDOW_AFTER_MIN;
-    };
-    const batchSlots = slots.filter(inWindow);
+      memberId,
+      tz,
+      now,
+    }));
+    const { dayKey } = activeSlots;
+    const batchSlots = [...activeSlots.slots];
+    if (batchSlots.length === 0) return null;
 
     // The student's preferred slot is marked first so it becomes the
     // "primary" row the front desk sees.
@@ -353,6 +352,19 @@ export function assertSelfCheckinAllowed({ gym, tz, coords = {}, now = new Date(
  */
 export async function runMemberSelfCheckIn({ member, actorId, ctx, notes = null }) {
   const now = new Date();
+  const currentSlots = await getCurrentEnrolledSlots({
+    gymId: member.gymId,
+    memberId: member._id,
+    tz: ctx.tz ?? "Asia/Kolkata",
+    now,
+  });
+  if (currentSlots.slots.length === 0) {
+    throw badRequest(
+      "You can mark attendance only while one of your enrolled class slots is active.",
+      "slot_not_active",
+    );
+  }
+
   const result = await runCheckIn({
     gymId: member.gymId,
     actorId,
@@ -375,7 +387,14 @@ export async function runMemberSelfCheckIn({ member, actorId, ctx, notes = null 
   // running slots ALSO marks them present in the class register (Mark/View
   // attendance + shows in history). Never blocks or fails the check-in itself.
   try {
-    const auto = await autoMarkSlotAttendance({ gymId: member.gymId, member, actorId, ctx, now });
+    const auto = await autoMarkSlotAttendance({
+      gymId: member.gymId,
+      member,
+      actorId,
+      ctx,
+      now,
+      currentSlots,
+    });
     if (auto) {
       result.autoMarked = true;
       // N assigned classes today → N register marks, quota −N.

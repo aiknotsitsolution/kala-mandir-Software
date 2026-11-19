@@ -31,6 +31,7 @@ import { currentMembership, membershipBalance } from "../lib/membership.js";
 import { loadGymContext } from "../services/context.js";
 import { ymdInTz, timeZoneOffsetMs } from "../lib/dates.js";
 import { quotaForMembership, syncQuotaNotifications } from "../services/quota.js";
+import { syncCurrentClassSlotReminders } from "../services/classSlotReminders.js";
 import { writeAudit } from "../lib/audit.js";
 import {
   assertGymQrToken,
@@ -476,6 +477,13 @@ router.get(
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.id).lean();
     if (!user?.memberId) return res.json([]);
+    const ctx = await loadGymContext(req.user.gymId);
+    await syncCurrentClassSlotReminders({
+      gymId: req.user.gymId,
+      memberId: user.memberId,
+      userId: user._id,
+      tz: ctx.tz,
+    });
     const rows = await AppNotification.find({
       gymId: req.user.gymId,
       memberId: user.memberId,

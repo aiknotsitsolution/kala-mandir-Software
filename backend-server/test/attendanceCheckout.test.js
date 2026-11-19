@@ -7,7 +7,7 @@ test("uses one hour after check-in when no slot is available", () => {
   assert.equal(checkOut.toISOString(), "2026-11-18T05:00:00.000Z");
 });
 
-test("uses the slot end time in the gym timezone", () => {
+test("checks out one hour after check-in even when a slot is present", () => {
   const checkOut = autoCheckoutAt(
     {
       checkIn: "2026-11-18T04:05:00.000Z",
@@ -16,10 +16,10 @@ test("uses the slot end time in the gym timezone", () => {
     { startTime: "09:00", endTime: "10:00" },
     "Asia/Kolkata",
   );
-  assert.equal(checkOut.toISOString(), "2026-11-18T04:30:00.000Z");
+  assert.equal(checkOut.toISOString(), "2026-11-18T05:05:00.000Z");
 });
 
-test("handles a slot that ends after midnight", () => {
+test("checks out one hour after check-in regardless of the slot end time", () => {
   const checkOut = autoCheckoutAt(
     {
       checkIn: "2026-11-18T16:30:00.000Z",
@@ -28,5 +28,5 @@ test("handles a slot that ends after midnight", () => {
     { startTime: "22:00", endTime: "02:00" },
     "Asia/Kolkata",
   );
-  assert.equal(checkOut.toISOString(), "2026-11-18T20:30:00.000Z");
+  assert.equal(checkOut.toISOString(), "2026-11-18T17:30:00.000Z");
 });

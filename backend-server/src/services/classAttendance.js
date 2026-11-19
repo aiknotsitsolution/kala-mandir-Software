@@ -27,6 +27,7 @@ import ClassSlot from "../models/ClassSlot.js";
 import GymClass from "../models/GymClass.js";
 import SlotEnrollment from "../models/SlotEnrollment.js";
 import AttendanceRecord from "../models/AttendanceRecord.js";
+import AppNotification from "../models/AppNotification.js";
 import StaffProfile from "../models/StaffProfile.js";
 import { writeAudit } from "../lib/audit.js";
 import { currentMembership, checkEligibility } from "../lib/membership.js";
@@ -259,8 +260,7 @@ export async function markSlotAttendance({
           gymId,
           memberId: member._id,
           membershipId: membership._id,
-          // checkIn: now,
-          checkIn: instantInTz(dayKey, slot.startTime, tz),
+          checkIn: actorRole === "member" ? now : instantInTz(dayKey, slot.startTime, tz),
           // sessionDate: parseDateOnly(dayKey),
           status: "checked_in",
           method,
@@ -292,6 +292,17 @@ export async function markSlotAttendance({
         },
       },
       session,
+    );
+
+    await AppNotification.updateOne(
+      {
+        gymId,
+        memberId: member._id,
+        type: "class_reminder",
+        dedupeKey: `class-slot-reminder:${member._id}:${slot._id}:${dayKey}`,
+      },
+      { $set: { isRead: true } },
+      { session },
     );
 
     // 11. Derive the fresh quota and sync notifications.

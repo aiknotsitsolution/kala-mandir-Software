@@ -12,6 +12,13 @@ export function toMinutes(hhmm) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+/** True while the current local time is inside [start, end). */
+export function isWithinSlotTime(nowMinutes, startTime, endTime) {
+  const start = toMinutes(startTime);
+  const end = toMinutes(endTime);
+  return start !== null && end !== null && end > start && nowMinutes >= start && nowMinutes < end;
+}
+
 /** True when [aStart, aEnd) overlaps [bStart, bEnd) in minutes. */
 export function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && bStart < aEnd;

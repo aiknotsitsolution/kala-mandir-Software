@@ -47,7 +47,10 @@ export function MemberPortalLayout() {
     const data = useData();
     const navigate = useNavigate();
     const profile = session?.profile;
-    const reminders = useAsync(() => data.getMyReminders(), [data]);
+    const reminders = useAsync(() => data.getMyReminders(), [data], {
+        pollingInterval: 30_000,
+        skipPollingIfUnfocused: true,
+    });
     const reminderRows = reminders.data ?? [];
     const [clearingReminders, setClearingReminders] = useState(false);
     const clearReminders = async () => {
