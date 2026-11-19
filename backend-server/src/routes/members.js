@@ -425,8 +425,8 @@ router.post(
     const ctx = await loadGymContext(req.user.gymId);
     const gymId = ctx.gym._id;
 
-    const plan = await MembershipPlan.findOne({ _id: input.planId, gymId }).lean();
-    if (!plan) throw badRequest("Selected membership plan was not found", "invalid_plan");
+    const plan = await MembershipPlan.findOne({ _id: input.planId, gymId, isActive: true }).lean();
+    if (!plan) throw badRequest("Selected plan was not found or is inactive", "invalid_plan");
 
     let created;
     try

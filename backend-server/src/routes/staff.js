@@ -138,6 +138,7 @@ router.post(
       loginCreated = created;
       row.profileId = userId;
       await row.save();
+      await setStaffLoginActive(userId, input.employmentStatus !== "resigned");
     }
 
     await writeAudit({
@@ -162,6 +163,14 @@ router.patch(
   {
     const input = parseBody(updateStaffSchema, req.body);
     const row = await findStaffOr404(req.user.gymId, req.params.id);
+    if (
+      input.employmentStatus === "resigned" &&
+      row.profileId &&
+      String(row.profileId) === String(req.user.id)
+    )
+    {
+      throw forbidden("You cannot archive your own account.");
+    }
 
     const updates = {};
     for (const key of STAFF_KEYS)
@@ -208,6 +217,10 @@ router.patch(
       loginUpdated = true;
     }
 
+    const loginsSynced = input.employmentStatus !== undefined
+      ? await setStaffLoginActive(updated.profileId, input.employmentStatus !== "resigned")
+      : null;
+
     await writeAudit({
       gymId: req.user.gymId,
       actorId: req.user.id,
@@ -215,7 +228,11 @@ router.patch(
       entityId: String(row._id),
       action: "update",
       oldValues: pick(row, STAFF_KEYS),
-      newValues: { ...pick(updates, STAFF_KEYS), ...(loginUpdated ? { loginUpdated: true } : {}) },
+      newValues: {
+        ...pick(updates, STAFF_KEYS),
+        ...(loginUpdated ? { loginUpdated: true } : {}),
+        ...(loginsSynced !== null ? { loginsSynced } : {}),
+      },
     });
 
     res.json(toStaff(updated));

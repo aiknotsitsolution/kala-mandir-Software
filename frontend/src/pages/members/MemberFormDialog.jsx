@@ -162,11 +162,7 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
     const photoValue = watch("photoUrl") ?? "";
     const memberName = watch("fullName") || "Student";
     const isEdit = member !== null;
-    /** Plans offered in the picker — active first; fall back to everything. */
-    const planChoices = useMemo(() => {
-        const active = plans.filter((plan) => plan.isActive);
-        return active.length > 0 ? active : plans;
-    }, [plans]);
+    const planChoices = useMemo(() => plans.filter((plan) => plan.isActive), [plans]);
     /** Currently picked plan — powers the "total" read-out under the picker. */
     const watchedPlanId = watch("planId");
     const selectedPlan = useMemo(
@@ -483,7 +479,7 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
                 <div className="space-y-2 sm:col-span-2">
                   <Label>Plan</Label>
                   <Controller control={control} name="planId" render={({ field }) => (<Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className="w-full" disabled={planChoices.length === 0}>
                           <SelectValue placeholder="Choose a plan"/>
                         </SelectTrigger>
                         <SelectContent>
@@ -492,6 +488,7 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
                             </SelectItem>))}
                         </SelectContent>
                       </Select>)}/>
+                  {planChoices.length === 0 ? <p className="text-xs text-muted-foreground">No active plans available. Activate a plan before adding a student.</p> : null}
                   {selectedPlan ? (<div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border/60 bg-secondary/40 px-3 py-2 text-xs">
                       <span className="flex items-baseline gap-1.5">
                         <span className="text-muted-foreground">Total</span>
@@ -580,7 +577,7 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || (!isEdit && planChoices.length === 0)}>
               {submitting ? <Loader2Icon className="size-4 animate-spin"/> : null}
               {submitting ? "Saving…" : isEdit ? "Save changes" : "Add student"}
             </Button>

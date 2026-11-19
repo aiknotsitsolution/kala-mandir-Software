@@ -17,14 +17,15 @@ vi.mock("@/auth/AuthProvider", () => ({
 const members = [
     { id: "m1", fullName: "Asha Kapoor", status: "active", effectiveStatus: "active" },
     { id: "m2", fullName: "Riya Shah", status: "active", effectiveStatus: "expired" },
+    { id: "m3", fullName: "Inactive Student", status: "inactive", effectiveStatus: "inactive", membership: { status: "active" } },
 ];
 const statusCounts = {
-    all: 2,
+    all: 3,
     active: 1,
     expiring_soon: 0,
     expired: 1,
     suspended: 0,
-    inactive: 0,
+    inactive: 1,
 };
 
 function renderPage() {
@@ -61,7 +62,7 @@ describe("MembersPage status cards", () => {
         renderPage();
 
         expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
-        expect(within(screen.getByRole("button", { name: "Filter students by All students" })).getByText("2")).toBeInTheDocument();
+        expect(within(screen.getByRole("button", { name: "Filter students by All students" })).getByText("3")).toBeInTheDocument();
         const expiredCard = screen.getByRole("button", { name: "Filter students by Expired" });
         expect(expiredCard).toHaveAttribute("aria-pressed", "false");
 
@@ -75,5 +76,14 @@ describe("MembersPage status cards", () => {
             page: 1,
         })));
         expect(screen.getByRole("combobox", { name: "Filter by status" })).toHaveTextContent("Expired");
+    });
+
+    it("shows a deactivated member as inactive despite an active membership", async () => {
+        renderPage();
+
+        const student = await screen.findByText("Inactive Student");
+        const row = student.closest("tr");
+
+        expect(within(row).getAllByText("Inactive")).toHaveLength(2);
     });
 });

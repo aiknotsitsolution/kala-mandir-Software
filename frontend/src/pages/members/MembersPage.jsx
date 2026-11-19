@@ -346,14 +346,14 @@ export function MembersPage() {
                               <span className="flex items-center gap-1">
                                 {/* Mobile-only: the Status column is hidden below sm. */}
                                 <span className="sm:hidden">
-                                  <StatusBadge status={member.membership?.status ?? member.effectiveStatus} className="px-1 py-0 text-[9px] leading-none"/>
+                                  <StatusBadge status={member.effectiveStatus ?? member.status} className="px-1 py-0 text-[9px] leading-none"/>
                                 </span>
                               </span>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="hidden px-2 align-middle sm:table-cell sm:px-3">
-                          <StatusBadge status={member.membership?.status ?? member.effectiveStatus}/>
+                          <StatusBadge status={member.effectiveStatus ?? member.status}/>
                         </TableCell>
                         <TableCell className="px-2 align-middle sm:px-3">
                           <ClassesCell member={member}/>

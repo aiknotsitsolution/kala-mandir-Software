@@ -25,14 +25,11 @@ export function RenewDialog({ open, onOpenChange, member, plans, onSave, }) {
     const [paymentMethod, setPaymentMethod] = useState("cash");
     const [paymentAmount, setPaymentAmount] = useState("");
     const [paymentError, setPaymentError] = useState(null);
-    const planChoices = useMemo(() => {
-        const active = plans.filter((plan) => plan.isActive);
-        return active.length > 0 ? active : plans;
-    }, [plans]);
+    const planChoices = useMemo(() => plans.filter((plan) => plan.isActive), [plans]);
     const { register, handleSubmit, control, reset, watch, formState: { errors }, } = useForm({
         resolver: zodResolver(renewalFormSchema),
         defaultValues: {
-            planId: member.membership?.planId ?? planChoices[0]?.id ?? "",
+            planId: planChoices.find((plan) => plan.id === member.membership?.planId)?.id ?? planChoices[0]?.id ?? "",
             startDate: renewalStartDate(new Date(), member.membership),
             discount: 0,
             notes: "",
@@ -46,7 +43,7 @@ export function RenewDialog({ open, onOpenChange, member, plans, onSave, }) {
         setPaymentAmount("");
         setPaymentError(null);
         reset({
-            planId: member.membership?.planId ?? planChoices[0]?.id ?? "",
+            planId: planChoices.find((plan) => plan.id === member.membership?.planId)?.id ?? planChoices[0]?.id ?? "",
             startDate: renewalStartDate(new Date(), member.membership),
             discount: 0,
             notes: "",
@@ -102,7 +99,7 @@ export function RenewDialog({ open, onOpenChange, member, plans, onSave, }) {
             <div className="space-y-2 sm:col-span-2">
               <Label>Plan</Label>
               <Controller control={control} name="planId" render={({ field }) => (<Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full" disabled={planChoices.length === 0}>
                       <SelectValue placeholder="Choose a plan"/>
                     </SelectTrigger>
                     <SelectContent>
@@ -112,6 +109,7 @@ export function RenewDialog({ open, onOpenChange, member, plans, onSave, }) {
                         </SelectItem>))}
                     </SelectContent>
                   </Select>)}/>
+              {planChoices.length === 0 ? <p className="text-xs text-muted-foreground">No active plans available. Activate a plan before assigning or renewing a membership.</p> : null}
               {errors.planId ? <p className="text-xs text-destructive">{errors.planId.message}</p> : null}
             </div>
 
@@ -172,7 +170,7 @@ export function RenewDialog({ open, onOpenChange, member, plans, onSave, }) {
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || planChoices.length === 0}>
               {submitting ? (<Loader2Icon className="size-4 animate-spin"/>) : (<WalletIcon className="size-4"/>)}
               {submitting
             ? "Saving…"
