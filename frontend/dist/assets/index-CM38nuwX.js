@@ -15337,7 +15337,7 @@ const X3 = st.forwardRef(function (n, i) {
       },
       ...e,
     }),
-  $3 = "http://localhost:8000/api",
+  $3 = "https://kala-mandir-software-api.onrender.com/api",
   $x = "Asia/Kolkata";
 function Zx(e) {
   const n = e?.trim();
