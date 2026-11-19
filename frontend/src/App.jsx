@@ -1,22 +1,24 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, RequireAuth, useAuth } from "@/auth/AuthProvider";
 import { AppShell } from "@/components/layout/AppShell";
-import { LoginPage } from "@/pages/LoginPage";
-import { DashboardPage } from "@/pages/DashboardPage";
-import { StaffPage } from "@/pages/staff/StaffPage";
-import { StaffDetailPage } from "@/pages/staff/StaffDetailPage";
-import { ClassesPage } from "@/pages/classes/ClassesPage";
-import { ReportsPage } from "@/pages/reports/ReportsPage";
-import { NotificationsPage } from "@/pages/notifications/NotificationsPage";
-import { SettingsPage } from "@/pages/settings/SettingsPage";
-import { ManageGymPage } from "@/pages/manage/ManageGymPage";
-import { PlansPage } from "@/pages/plans/PlansPage";
-import { PaymentsPage } from "@/pages/payments/PaymentsPage";
-import { MembersPage } from "@/pages/members/MembersPage";
-import { MemberDetailPage } from "@/pages/members/MemberDetailPage";
-import { AttendancePage } from "@/pages/attendance/AttendancePage";
-import { MemberPortalLayout } from "@/pages/portal/MemberPortalLayout";
+const lazyPage = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
+const LoginPage = lazyPage(() => import("@/pages/LoginPage"), "LoginPage");
+const DashboardPage = lazyPage(() => import("@/pages/DashboardPage"), "DashboardPage");
+const StaffPage = lazyPage(() => import("@/pages/staff/StaffPage"), "StaffPage");
+const StaffDetailPage = lazyPage(() => import("@/pages/staff/StaffDetailPage"), "StaffDetailPage");
+const ClassesPage = lazyPage(() => import("@/pages/classes/ClassesPage"), "ClassesPage");
+const ReportsPage = lazyPage(() => import("@/pages/reports/ReportsPage"), "ReportsPage");
+const NotificationsPage = lazyPage(() => import("@/pages/notifications/NotificationsPage"), "NotificationsPage");
+const SettingsPage = lazyPage(() => import("@/pages/settings/SettingsPage"), "SettingsPage");
+const ManageGymPage = lazyPage(() => import("@/pages/manage/ManageGymPage"), "ManageGymPage");
+const PlansPage = lazyPage(() => import("@/pages/plans/PlansPage"), "PlansPage");
+const PaymentsPage = lazyPage(() => import("@/pages/payments/PaymentsPage"), "PaymentsPage");
+const MembersPage = lazyPage(() => import("@/pages/members/MembersPage"), "MembersPage");
+const MemberDetailPage = lazyPage(() => import("@/pages/members/MemberDetailPage"), "MemberDetailPage");
+const AttendancePage = lazyPage(() => import("@/pages/attendance/AttendancePage"), "AttendancePage");
+const MemberPortalLayout = lazyPage(() => import("@/pages/portal/MemberPortalLayout"), "MemberPortalLayout");
 /** Old history page → now a tab on /attendance; keep deep links (dashboard, reports). */
 function AttendanceHistoryRedirect() {
     const location = useLocation();
@@ -24,11 +26,11 @@ function AttendanceHistoryRedirect() {
     params.set("tab", "history");
     return <Navigate to={{ pathname: "/attendance", search: `?${params.toString()}` }} replace />;
 }
-import { MemberPortalPage } from "@/pages/portal/MemberPortalPage";
-import { MyAttendancePage } from "@/pages/portal/MyAttendancePage";
-import { MyPaymentsPage } from "@/pages/portal/MyPaymentsPage";
-import { ProfilePage } from "@/pages/portal/ProfilePage";
-import { ChangePasswordPage } from "@/pages/portal/ChangePasswordPage";
+const MemberPortalPage = lazyPage(() => import("@/pages/portal/MemberPortalPage"), "MemberPortalPage");
+const MyAttendancePage = lazyPage(() => import("@/pages/portal/MyAttendancePage"), "MyAttendancePage");
+const MyPaymentsPage = lazyPage(() => import("@/pages/portal/MyPaymentsPage"), "MyPaymentsPage");
+const ProfilePage = lazyPage(() => import("@/pages/portal/ProfilePage"), "ProfilePage");
+const ChangePasswordPage = lazyPage(() => import("@/pages/portal/ChangePasswordPage"), "ChangePasswordPage");
 /** Staff tree — identical to the pre-portal behaviour (AppShell + dashboard routes). */
 function StaffRoutes() {
     return (<Routes>
@@ -92,10 +94,12 @@ function RoleRoutes() {
 export default function App() {
     return (<AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />}/>
-          <Route path="*" element={<RoleRoutes />}/>
-        </Routes>
+        <Suspense fallback={<div className="flex min-h-dvh items-center justify-center" role="status">Loading...</div>}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />}/>
+            <Route path="*" element={<RoleRoutes />}/>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
       <Toaster position="top-right" richColors closeButton/>
     </AuthProvider>);
