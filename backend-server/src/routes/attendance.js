@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { Types } from "mongoose";
 import AttendanceRecord from "../models/AttendanceRecord.js";
+import { visitRecordFilter } from "../lib/attendanceRecords.js";
 import AppNotification from "../models/AppNotification.js";
 import Member from "../models/Member.js";
 import MemberMembership from "../models/MemberMembership.js";
@@ -495,7 +496,7 @@ router.post(
 /*  Listing + reports                                                  */
 /* ------------------------------------------------------------------ */
 
-/** GET /api/attendance?from&to&memberId&search&status&page&pageSize → Paginated<AttendanceRecord> */
+/** GET /api/attendance?from&to&memberId&search&status&page&pageSize&visitsOnly=true → Paginated<AttendanceRecord> */
 router.get(
   "/attendance",
   requireAuth,
@@ -503,7 +504,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
     await autoCheckoutDueAttendance({ gymId });
-    const filter = { gymId: new Types.ObjectId(gymId) };
+    const gymFilter = { gymId: new Types.ObjectId(gymId) };
+    const filter = req.query.visitsOnly === "true"
+      ? visitRecordFilter(gymFilter)
+      : gymFilter;
     // Date-only bounds need explicit handling: new Date("2026-10-22") is UTC
     // midnight, which silently drops the whole "to" day (22 Oct visits land
     // after 00:00 UTC). Date-only `to` spans the full day instead.
@@ -826,10 +830,10 @@ router.get(
     const ctx = await loadGymContext(req.user.gymId);
     const { from, to } = parseRange(req, ctx);
 
-    const rows = await AttendanceRecord.find({
+    const rows = await AttendanceRecord.find(visitRecordFilter({
       gymId: ctx.gym._id,
       checkIn: { $gte: from, $lte: to },
-    })
+    }))
       .select("memberId status checkIn checkOut")
       .lean();
 
@@ -876,10 +880,10 @@ router.get(
     const { from, to } = parseRange(req, ctx);
     const nowMs = Math.min(ctx.now.getTime(), to.getTime());
     const MAX_VISIT_MS = 43_200_000; // same 12h cap the summary uses
-    const rows = await AttendanceRecord.find({
+    const rows = await AttendanceRecord.find(visitRecordFilter({
       gymId: ctx.gym._id,
       checkIn: { $gte: from, $lte: to },
-    })
+    }))
       .select("memberId checkIn checkOut")
       .lean();
     const byMember = new Map();
@@ -963,10 +967,10 @@ router.get(
     const ctx = await loadGymContext(req.user.gymId);
     const { from, to } = parseRange(req, ctx);
 
-    const rows = await AttendanceRecord.find({
+    const rows = await AttendanceRecord.find(visitRecordFilter({
       gymId: ctx.gym._id,
       checkIn: { $gte: from, $lte: to },
-    })
+    }))
       .select("checkIn")
       .lean();
 
@@ -994,7 +998,7 @@ router.get(
     const limit = intParam(req.query.limit, 10, { min: 1, max: 50 });
 
     const rows = await AttendanceRecord.aggregate([
-      { $match: { gymId: ctx.gym._id, checkIn: { $gte: from, $lte: to } } },
+      { $match: visitRecordFilter({ gymId: ctx.gym._id, checkIn: { $gte: from, $lte: to } }) },
       { $group: { _id: "$memberId", visits: { $sum: 1 } } },
       { $sort: { visits: -1 } },
       { $limit: limit },

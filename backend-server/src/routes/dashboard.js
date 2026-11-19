@@ -3,6 +3,7 @@ import Member from "../models/Member.js";
 import MemberMembership from "../models/MemberMembership.js";
 import MembershipPlan from "../models/MembershipPlan.js";
 import AttendanceRecord from "../models/AttendanceRecord.js";
+import { visitRecordFilter } from "../lib/attendanceRecords.js";
 import PaymentRecord from "../models/PaymentRecord.js";
 import User from "../models/User.js";
 import { requireAuth, requireCap } from "../middleware/auth.js";
@@ -89,15 +90,15 @@ router.get(
     }
 
     const [todayAttendance, insideRows, revenueRows, dues, totalPaidRows] = await Promise.all([
-      AttendanceRecord.countDocuments({
+      AttendanceRecord.countDocuments(visitRecordFilter({
         gymId,
         checkIn: { $gte: todayStart, $lt: tomorrowStart },
-      }),
-      AttendanceRecord.countDocuments({
+      })),
+      AttendanceRecord.countDocuments(visitRecordFilter({
         gymId,
         checkIn: { $gte: todayStart, $lt: tomorrowStart },
         status: "checked_in",
-      }),
+      })),
       PaymentRecord.aggregate([
         {
           $match: {
@@ -153,7 +154,7 @@ router.get(
     const from = startOfDayInTz(addDays(now, -(days - 1)), tz);
 
     const rows = await AttendanceRecord.aggregate([
-      { $match: { gymId: ctx.gym._id, checkIn: { $gte: from } } },
+      { $match: visitRecordFilter({ gymId: ctx.gym._id, checkIn: { $gte: from } }) },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$checkIn", timezone: tz } },
@@ -264,7 +265,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
     const limit = intParam(req.query.limit, 6, { min: 1, max: 50 });
-    const rows = await AttendanceRecord.find({ gymId }).sort({ checkIn: -1 }).limit(limit).lean();
+    const rows = await AttendanceRecord.find(visitRecordFilter({ gymId })).sort({ checkIn: -1 }).limit(limit).lean();
 
     const memberIds = [...new Set(rows.map((r) => String(r.memberId)))];
     const scannerIds = [...new Set(rows.map((r) => r.scannerId).filter(Boolean).map(String))];

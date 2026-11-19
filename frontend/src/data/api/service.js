@@ -312,6 +312,7 @@ export class ApiDataService {
             to: query.to,
             memberId: query.memberId,
             search: query.search,
+            visitsOnly: query.visitsOnly ? "true" : undefined,
             status: query.status && query.status !== "all" ? query.status : undefined,
             page: query.page,
             pageSize: query.pageSize,

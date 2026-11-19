@@ -128,6 +128,7 @@ export function ViewAttendancePage({ hideHeader = false }) {
         status,
         page,
         pageSize: PAGE_SIZE,
+        visitsOnly: true,
     }), [range, status, page]);
     const list = useAsync(() => data.listAttendance(query), [data, query], {
         pollingInterval: 60_000,
@@ -184,6 +185,7 @@ export function ViewAttendancePage({ hideHeader = false }) {
                         from: query.from,
                         to: query.to,
                         status,
+                        visitsOnly: true,
                         page: currentPage,
                         pageSize: EXPORT_PAGE_SIZE,
                     });
@@ -398,6 +400,7 @@ export function ViewAttendancePage({ hideHeader = false }) {
                   {items.map((record, index) => {
             const open = record.status === "checked_in" && !record.checkOut;
             const ms = visitMs(record, nowTick);
+            const slotName = record.slotName ?? record.meta?.slotName;
             return (<TableRow key={record.id}>
                       <TableCell className="text-sm text-muted-foreground tabular-nums">
                         {(page - 1) * PAGE_SIZE + index + 1}
@@ -409,6 +412,7 @@ export function ViewAttendancePage({ hideHeader = false }) {
                             <Link to={`/members/${record.memberId}`} className="block truncate text-sm font-medium text-foreground hover:underline">
                               {record.memberName ?? "Student"}
                             </Link>
+                            {slotName ? <p className="truncate text-xs text-muted-foreground">{slotName}</p> : null}
                           </div>
                         </div>
                       </TableCell>

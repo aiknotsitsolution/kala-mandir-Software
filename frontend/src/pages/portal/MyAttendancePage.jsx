@@ -81,7 +81,10 @@ export function MyAttendancePage() {
             const open = record.status === "checked_in" && !record.checkOut;
             const ms = visitSpanMs(record, tick);
             return (<TableRow key={record.id}>
-                      <TableCell className="text-sm">{formatDateTime(record.checkIn)}</TableCell>
+                      <TableCell className="text-sm">
+                        {formatDateTime(record.checkIn)}
+                        {record.meta?.slotName ? <p className="mt-0.5 text-xs text-muted-foreground">{record.meta.slotName}</p> : null}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {record.checkOut ? formatDateTime(record.checkOut) : "—"}
                       </TableCell>

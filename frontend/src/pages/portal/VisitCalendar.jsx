@@ -84,7 +84,10 @@ export function VisitCalendar({ records, showHistoryLink = true }) {
             No visits yet — your check-ins will appear here.
           </p>) : (<ul className="divide-y divide-dashed divide-paper-edge/70">
             {lastFive.map((record) => (<li key={record.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <span className="font-medium">{formatDate(record.checkIn)}</span>
+                <span className="font-medium">
+                  {formatDate(record.checkIn)}
+                  {record.meta?.slotName ? <span className="block text-xs text-paper-foreground/65">{record.meta.slotName}</span> : null}
+                </span>
                 <span className="flex items-center gap-2 text-xs text-paper-foreground/70">
                   <span className="font-mono">{formatTime(record.checkIn)}</span>
                   <span className="rounded border border-dashed border-paper-edge px-1.5 py-0.5 text-[10px] tracking-wide uppercase">

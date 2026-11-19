@@ -309,7 +309,10 @@ export function MemberDetailPage() {
                 </TableHeader>
                 <TableBody>
                   {(attendance.data ?? []).map((record) => (<TableRow key={record.id}>
-                      <TableCell className="text-sm">{formatDateTime(record.checkIn)}</TableCell>
+                      <TableCell className="text-sm">
+                        {formatDateTime(record.checkIn)}
+                        {record.meta?.slotName ? <p className="mt-0.5 text-xs text-muted-foreground">{record.meta.slotName}</p> : null}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {record.checkOut ? formatDateTime(record.checkOut) : "—"}
                       </TableCell>

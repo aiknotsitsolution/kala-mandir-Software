@@ -8,6 +8,7 @@ import MemberMembership from "../models/MemberMembership.js";
 import Tag from "../models/Tag.js";
 import MembershipPlan from "../models/MembershipPlan.js";
 import AttendanceRecord from "../models/AttendanceRecord.js";
+import { visitRecordFilter } from "../lib/attendanceRecords.js";
 import AppNotification from "../models/AppNotification.js";
 import PaymentRecord from "../models/PaymentRecord.js";
 import ClassEnrollment from "../models/ClassEnrollment.js";
@@ -242,14 +243,14 @@ router.post(
   }),
 );
 
-/** GET /api/me/attendance?limit=30 → own visits, newest first. */
+/** GET /api/me/attendance?limit=30 → own physical visits, newest first. */
 router.get(
   "/attendance",
   asyncHandler(async (req, res) => {
     const ctx = await loadGymContext(req.user.gymId);
     const member = await loadSelf(req);
     const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 200);
-    const rows = await AttendanceRecord.find({ gymId: req.user.gymId, memberId: member._id })
+    const rows = await AttendanceRecord.find(visitRecordFilter({ gymId: req.user.gymId, memberId: member._id }))
       .sort({ checkIn: -1 })
       .limit(limit)
       .lean();

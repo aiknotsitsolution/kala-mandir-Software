@@ -6,6 +6,7 @@ import Tag from "../models/Tag.js";
 import MemberMembership from "../models/MemberMembership.js";
 import MembershipPlan from "../models/MembershipPlan.js";
 import AttendanceRecord from "../models/AttendanceRecord.js";
+import { visitRecordFilter } from "../lib/attendanceRecords.js";
 import PaymentRecord from "../models/PaymentRecord.js";
 import ClassEnrollment from "../models/ClassEnrollment.js";
 import ClassSlot from "../models/ClassSlot.js";
@@ -1189,7 +1190,7 @@ router.post(
   }),
 );
 
-/** GET /api/members/:id/attendance?limit=20 → AttendanceRecord[] (newest first) */
+/** GET /api/members/:id/attendance?limit=20 → physical visits (newest first) */
 router.get(
   "/members/:id/attendance",
   requireAuth,
@@ -1199,7 +1200,7 @@ router.get(
     const ctx = await loadGymContext(req.user.gymId);
     const member = await findMemberOr404(ctx.gym._id, req.params.id);
     const limit = intParam(req.query.limit, 20, { min: 1, max: 200 });
-    const rows = await AttendanceRecord.find({ memberId: member._id })
+    const rows = await AttendanceRecord.find(visitRecordFilter({ gymId: ctx.gym._id, memberId: member._id }))
       .sort({ checkIn: -1 })
       .limit(limit)
       .lean();

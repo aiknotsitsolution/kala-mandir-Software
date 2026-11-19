@@ -188,6 +188,19 @@ export async function getCurrentEnrolledSlots({ gymId, memberId, tz, now = new D
   };
 }
 
+function preferredSlotFirst(member, slots) {
+  const orderedSlots = [...slots];
+  if (member.preferredSlot) {
+    const index = orderedSlots.findIndex((slot) => `${slot.startTime}-${slot.endTime}` === member.preferredSlot);
+    if (index > 0) orderedSlots.unshift(...orderedSlots.splice(index, 1));
+  }
+  return orderedSlots;
+}
+
+function slotLabel(slot) {
+  return slot.name || `${fmt12h(slot.startTime)} – ${fmt12h(slot.endTime)}`;
+}
+
 /**
  * Best-effort automatic register marks for a studio QR check-in.
  *
@@ -228,15 +241,8 @@ export async function autoMarkSlotAttendance({
       now,
     }));
     const { dayKey } = activeSlots;
-    const batchSlots = [...activeSlots.slots];
+    const batchSlots = preferredSlotFirst(member, activeSlots.slots);
     if (batchSlots.length === 0) return null;
-
-    // The student's preferred slot is marked first so it becomes the
-    // "primary" row the front desk sees.
-    if (member.preferredSlot) {
-      const index = batchSlots.findIndex((slot) => `${slot.startTime}-${slot.endTime}` === member.preferredSlot);
-      if (index > 0) batchSlots.unshift(...batchSlots.splice(index, 1));
-    }
 
     const marked = [];
     const slotLabels = [];
@@ -365,12 +371,14 @@ export async function runMemberSelfCheckIn({ member, actorId, ctx, notes = null 
     );
   }
 
+  const activeSlotLabels = preferredSlotFirst(member, currentSlots.slots).map(slotLabel);
   const result = await runCheckIn({
     gymId: member.gymId,
     actorId,
     lookup: { memberId: member._id },
     method: "qr",
     notes,
+    meta: { slotName: activeSlotLabels.join(", "), slotNames: activeSlotLabels },
     ctx,
   });
   if (result.status !== "ok") {

@@ -80,7 +80,7 @@ export function AttendanceHistoryContent() {
     const debouncedSearch = useDebounced(search, 300);
     const searchSettled = search.trim() === debouncedSearch.trim();
     const rangeValid = from.length > 0 && to.length > 0 && from <= to;
-    const query = useMemo(() => ({ from, to, status, page, pageSize: PAGE_SIZE, search: debouncedSearch.trim() }), [from, to, status, page, debouncedSearch]);
+    const query = useMemo(() => ({ from, to, status, page, pageSize: PAGE_SIZE, search: debouncedSearch.trim(), visitsOnly: true }), [from, to, status, page, debouncedSearch]);
     const list = useAsync(() => data.listAttendance(query), [data, query], {
         enabled: rangeValid,
         pollingInterval: 60_000,
@@ -136,6 +136,7 @@ export function AttendanceHistoryContent() {
                         to,
                         status,
                         search: debouncedSearch.trim() || undefined,
+                        visitsOnly: true,
                         page: currentPage,
                         pageSize: EXPORT_PAGE_SIZE,
                     });

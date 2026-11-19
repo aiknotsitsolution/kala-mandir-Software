@@ -74,7 +74,7 @@ async function rejected(session, reason, member = null, membership = null, extra
  * @param {object} params.ctx { settings, tz, now, expiringSoonDays }
  * @returns {Promise<CheckInResult>} HTTP 200 in both ok and rejected cases.
  */
-export async function runCheckIn({ gymId, actorId, lookup, method = "qr", notes = null, ctx }) {
+export async function runCheckIn({ gymId, actorId, lookup, method = "qr", notes = null, meta = {}, ctx }) {
   const { settings, tz } = ctx;
   const now = new Date();
   const today = parseDateOnly(ymdInTz(now, tz));
@@ -162,7 +162,7 @@ export async function runCheckIn({ gymId, actorId, lookup, method = "qr", notes 
           method,
           scannerId: actorId || null,
           notes: notes || null,
-          meta: {},
+          meta: meta ?? {},
         },
       ],
       { session },
