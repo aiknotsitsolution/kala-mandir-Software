@@ -30,7 +30,7 @@ export function ErrorState({ message, onRetry, title = "Something went wrong", }
 }
 export function SearchEmptyState({ query }) {
     return (<EmptyState icon={<SearchXIcon className="size-5"/>} title="No results found" description={query
-            ? `Nothing matches “${query}”. Try a different name, phone number or MongoDB ID.`
+            ? `Nothing matches “${query}”. Try a different name or phone number.`
             : "Try adjusting your search or filters."}/>);
 }
 export function Skeleton({ className }) {

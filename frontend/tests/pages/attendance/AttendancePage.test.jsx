@@ -109,7 +109,9 @@ describe("AttendancePage tabs and data loading", () => {
 
         expect(await screen.findByText("Asha Kapoor")).toBeInTheDocument();
         expect(screen.getByText("Riya Shah")).toBeInTheDocument();
-        expect(screen.getAllByRole("button", { name: "Edit attendance for Riya Shah" })).toHaveLength(2);
+        await waitFor(() => {
+            expect(screen.getAllByRole("button", { name: "Edit attendance for Riya Shah" })).toHaveLength(2);
+        });
     });
 
     it("filters the Mark Attendance roster by trainer name", async () => {

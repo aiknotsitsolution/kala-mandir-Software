@@ -69,7 +69,7 @@ export function LoginPage() {
         try {
             // One endpoint for everyone — the server resolves the role from the
             // database and the router sends staff to the dashboard, members to
-            // their portal. Sign in with email, MongoDB ID or a mobile number.
+            // their portal. Sign in with email, account ID or a mobile number.
             const next = await signIn({
                 identifier: values.identifier,
                 phone: values.phone,
@@ -196,8 +196,8 @@ export function LoginPage() {
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
             <div className="space-y-2">
-              <Label htmlFor="identifier">MongoDB ID / Email</Label>
-              <Input id="identifier" type="text" autoComplete="username" placeholder="Email or 24-character MongoDB ID" {...register("identifier")}/>
+              <Label htmlFor="identifier">Email or account ID</Label>
+              <Input id="identifier" type="text" autoComplete="username" placeholder="Email or account ID" {...register("identifier")}/>
               {errors.identifier ? <p className="text-xs text-destructive">{errors.identifier.message}</p> : null}
             </div>
 
@@ -232,7 +232,7 @@ export function LoginPage() {
           </form>
 
           <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
-            Staff and students sign in here with email, MongoDB ID or mobile number.
+            Staff and students sign in here with email, account ID or mobile number.
             Student accounts are created at the front desk — no self-registration.
           </p>
         </motion.div>

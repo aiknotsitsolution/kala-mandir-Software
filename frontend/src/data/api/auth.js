@@ -81,7 +81,7 @@ export class ApiAuthProvider {
         };
     }
     /**
-     * Sign in with an email address, MongoDB member ID, or mobile number.
+     * Sign in with an email address, account ID, or mobile number.
      */
     async signIn(credentials) {
         const identifier = String(credentials?.identifier ?? "").trim();
@@ -106,7 +106,7 @@ export class ApiAuthProvider {
         }
         catch (err) {
             if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-                throw new ApiError(err.status, "invalid_credentials", "Incorrect email/MongoDB ID/mobile or password.");
+                throw new ApiError(err.status, "invalid_credentials", "Incorrect email/account ID/mobile or password.");
             }
             throw err;
         }

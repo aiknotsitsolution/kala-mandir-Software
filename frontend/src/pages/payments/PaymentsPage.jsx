@@ -238,7 +238,6 @@ export function PaymentsPage() {
         downloadCsv(`payments-page-${page}`, toCsv(items, [
             { header: "Receipt no", accessor: (row) => row.receiptNo },
             { header: "Student", accessor: (row) => row.memberName },
-            { header: "MongoDB ID", accessor: (row) => row.memberId },
             { header: "Amount", accessor: (row) => row.amount },
             { header: "Method", accessor: (row) => PAYMENT_METHOD_LABELS[row.method] },
             { header: "Status", accessor: (row) => PAYMENT_STATUS_LABELS[row.status] },
@@ -321,7 +320,6 @@ export function PaymentsPage() {
                           <SmartImage src={null} name={row.memberName} className="size-8 shrink-0"/>
                           <div className="min-w-0">
                             <p className="truncate font-medium">{row.memberName}</p>
-                            <p className="truncate font-mono text-xs text-muted-foreground">{row.memberId}</p>
                           </div>
                         </div>
                       </TableCell>
@@ -363,7 +361,7 @@ export function PaymentsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-56 flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"/>
-              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student, MongoDB ID or receipt no." aria-label="Search payments" className="pl-9"/>
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student or receipt no." aria-label="Search payments" className="pl-9"/>
             </div>
             <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} aria-label="From date" className="w-auto"/>
             <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} aria-label="To date" className="w-auto"/>
@@ -422,10 +420,7 @@ export function PaymentsPage() {
                             <SmartImage src={null} name={payment.memberName ?? "Student"} className="size-8 shrink-0"/>
                             <div className="min-w-0">
                               <p className="truncate font-medium">{payment.memberName ?? "Student"}</p>
-                              <p className="truncate text-xs text-muted-foreground">
-                                <span className="font-mono">{payment.memberId}</span>
-                                {payment.membershipSummary ? ` · ${payment.membershipSummary}` : ""}
-                              </p>
+                              {payment.membershipSummary ? <p className="truncate text-xs text-muted-foreground">{payment.membershipSummary}</p> : null}
                             </div>
                           </div>
                         </TableCell>

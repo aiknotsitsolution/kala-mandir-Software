@@ -117,7 +117,6 @@ export function ReportsPage() {
         downloadCsv(`top-members-${days}d`, toCsv(rows.map((row, index) => ({ ...row, rank: index + 1 })), [
             { header: "Rank", accessor: (row) => row.rank },
             { header: "Student", accessor: (row) => row.memberName },
-            { header: "MongoDB ID", accessor: (row) => row.memberId },
             { header: "Visits", accessor: (row) => row.visits },
         ]));
     };
@@ -211,7 +210,6 @@ export function ReportsPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{member.memberName}</p>
-                      <p className="truncate text-xs text-muted-foreground">{member.memberId}</p>
                     </div>
                     <span className="text-sm font-semibold tabular">
                       {formatNumberIN(member.visits)}

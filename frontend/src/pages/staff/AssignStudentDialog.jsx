@@ -81,7 +81,7 @@ export function AssignStudentDialog({ staff, open, onOpenChange, onChanged }) {
                                         onChange={() => toggle(m.id)}
                                         className="size-4 rounded border-input"
                                     />
-                                    <span className="text-sm">{m.fullName} · {m.id}</span>
+                                    <span className="text-sm">{m.fullName}</span>
                                 </label>
                             ))
                         )}

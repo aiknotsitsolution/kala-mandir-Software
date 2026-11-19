@@ -139,7 +139,7 @@ export function StaffDetailPage() {
               {students.length === 0 ? (<p className="mt-3 py-3 text-sm text-muted-foreground">No students assigned yet.</p>) : (<div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {students.map((student) => (<Link key={student.id} to={`/members/${student.id}`} className="rounded-md border border-border/60 px-3 py-2 transition-colors hover:border-km-gold/60 hover:bg-accent/40">
                       <p className="truncate text-sm font-medium">{student.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{student.id}{student.phone ? ` · ${student.phone}` : ""}</p>
+                      {student.phone ? <p className="text-xs text-muted-foreground">{student.phone}</p> : null}
                     </Link>))}
                 </div>)}
             </CardContent>

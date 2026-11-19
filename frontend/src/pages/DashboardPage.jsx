@@ -262,9 +262,7 @@ export function DashboardPage() {
                       <SmartImage src={record.memberPhoto} name={record.memberName ?? "Student"} className="size-8"/>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-medium text-foreground">{record.memberName}</p>
-                        <p className="truncate text-[11.5px] text-muted-foreground">
-                          {record.memberId} · {formatTime(record.checkIn)}
-                        </p>
+                        <p className="truncate text-[11.5px] text-muted-foreground">{formatTime(record.checkIn)}</p>
                       </div>
                       <span className={record.status === "checked_out"
                         ? "rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground"
@@ -288,9 +286,7 @@ export function DashboardPage() {
                         <Link to={`/members/${member.id}`} className="block truncate text-[13px] font-medium text-foreground hover:underline">
                           {member.fullName}
                         </Link>
-                        <p className="truncate text-[11.5px] text-muted-foreground">
-                          {member.id} · joined {formatDate(member.joinDate)}
-                        </p>
+                        <p className="truncate text-[11.5px] text-muted-foreground">Joined {formatDate(member.joinDate)}</p>
                       </div>
                       <StatusBadge status={member.effectiveStatus}/>
                     </li>))}

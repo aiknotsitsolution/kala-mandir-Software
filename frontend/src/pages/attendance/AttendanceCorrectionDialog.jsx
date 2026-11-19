@@ -102,7 +102,7 @@ export function AttendanceCorrectionDialog({ record, open, onOpenChange, onSaved
           <DialogTitle>Correct attendance</DialogTitle>
           <DialogDescription>
             {record
-            ? `${record.memberName ?? "Student"}${record.memberId ? ` · ${record.memberId}` : ""} · checked in ${formatDateTime(record.checkIn)}`
+            ? `${record.memberName ?? "Student"} · checked in ${formatDateTime(record.checkIn)}`
             : "Adjust the recorded times or add a note."}
           </DialogDescription>
         </DialogHeader>

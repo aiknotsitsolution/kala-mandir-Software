@@ -116,7 +116,7 @@ export function MemberDetailPage() {
     const membership = current.membership;
     const isActive = current.status === "active";
     return (<div className="min-w-0 space-y-6">
-      <PageHeader breadcrumbs={[{ label: "Students", to: "/members" }, { label: current.fullName }]} title={current.fullName} description={`${current.id} · joined ${formatDate(current.joinDate)}`} actions={canEdit ? (<>
+      <PageHeader breadcrumbs={[{ label: "Students", to: "/members" }, { label: current.fullName }]} title={current.fullName} description={`Joined ${formatDate(current.joinDate)}`} actions={canEdit ? (<>
               <Button variant="outline" onClick={() => setEditOpen(true)}>
                 <PencilIcon className="size-4"/> Edit
               </Button>
@@ -144,7 +144,6 @@ export function MemberDetailPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-lg font-semibold tracking-tight">{current.fullName}</p>
                       <StatusBadge status={current.effectiveStatus}/>
-                      <Badge variant="secondary">{current.id}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Student since {formatDate(current.joinDate)}

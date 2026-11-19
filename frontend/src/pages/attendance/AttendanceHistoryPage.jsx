@@ -155,7 +155,6 @@ export function AttendanceHistoryContent() {
                     : "";
                 downloadCsv(`attendance-${from}-to-${to}${status === "all" ? "" : `-${status}`}${searchSuffix}`, toCsv(matchingRecords, [
                     { header: "Student", accessor: (row) => row.memberName ?? "" },
-                    { header: "MongoDB ID", accessor: (row) => row.memberId ?? "" },
                     { header: "Slot", accessor: (row) => row.meta?.slotName ?? "" },
                     { header: "Check-in", accessor: (row) => formatDateTime(row.checkIn) },
                     {
@@ -346,9 +345,6 @@ export function AttendanceHistoryContent() {
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-foreground">
                               {record.memberName ?? "Student"}
-                            </p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {record.memberId ?? "—"}
                             </p>
                           </div>
                         </div>

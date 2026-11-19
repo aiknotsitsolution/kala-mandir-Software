@@ -25,7 +25,7 @@ function renderPage() {
     );
 }
 
-describe("MarkAttendancePage MongoDB ID attendance", () => {
+describe("MarkAttendancePage student ID attendance", () => {
     beforeEach(() => {
         store.dispatch(queryApi.util.resetApiState());
         Object.assign(mockData, {
@@ -59,11 +59,11 @@ describe("MarkAttendancePage MongoDB ID attendance", () => {
         });
     });
 
-    it("accepts a MongoDB ID for a walk-in and sends it as memberId", async () => {
+    it("accepts a student ID for a walk-in and sends it as memberId", async () => {
         const user = userEvent.setup();
         renderPage();
 
-        const memberIdInput = await screen.findByLabelText("Mark by MongoDB member ID");
+        const memberIdInput = await screen.findByLabelText("Mark by student ID");
         await waitFor(() => expect(memberIdInput).toBeEnabled());
         await user.type(memberIdInput, memberId);
         await user.click(screen.getByRole("button", { name: "Mark attendance" }));

@@ -81,9 +81,8 @@ export function MembershipPass({ profile }) {
                 <p className="truncate text-lg font-semibold tracking-tight sm:text-xl">
                   {me?.fullName ?? "Student"}
                 </p>
-                <p className="truncate font-mono text-[11px] tracking-wide text-paper-foreground/70">
-                  {me?.id ?? "—"}
-                  {membership?.planName ? ` · ${membership.planName}` : ""}
+                <p className="truncate text-[11px] tracking-wide text-paper-foreground/70">
+                  {membership?.planName ?? "Student membership"}
                 </p>
               </div>
             </div>

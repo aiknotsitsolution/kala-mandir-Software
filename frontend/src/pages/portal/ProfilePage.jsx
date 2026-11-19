@@ -102,9 +102,8 @@ export function ProfilePage() {
                   <SmartImage src={me?.photoUrl} name={me?.fullName ?? "Student"} className="size-14 shrink-0 rounded-full text-sm ring-2 ring-border/60"/>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-lg font-semibold tracking-tight">{me?.fullName ?? "Student"}</p>
-                    <p className="truncate font-mono text-xs tracking-wide text-muted-foreground">
-                      {me?.id ?? "—"}
-                      {membership?.planName ? ` · ${membership.planName}` : ""}
+                    <p className="truncate text-xs tracking-wide text-muted-foreground">
+                      {membership?.planName ?? "Student account"}
                     </p>
                   </div>
                   <Stamp label={stamp.label} tone={stamp.tone} className="shrink-0"/>

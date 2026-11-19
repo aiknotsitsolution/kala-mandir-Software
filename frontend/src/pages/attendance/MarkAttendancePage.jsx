@@ -79,7 +79,7 @@ export function MarkAttendancePage({ hideHeader = false }) {
         if (!memberIdInput.trim() || !slotId)
             return;
         if (!/^[a-f\d]{24}$/i.test(memberIdInput.trim())) {
-            toast.error("Enter a valid MongoDB student ID.");
+            toast.error("Enter a valid student ID.");
             return;
         }
         runManual(async () => {
@@ -98,7 +98,7 @@ export function MarkAttendancePage({ hideHeader = false }) {
     const markedCount = students.filter((s) => s.marked).length;
 
     return (<div className="space-y-6">
-      {!hideHeader ? <PageHeader title="Mark Attendance" description="Open a slot and tap Mark next to each student's name, or enter a MongoDB member ID for a walk-in."/> : null}
+      {!hideHeader ? <PageHeader title="Mark Attendance" description="Open a slot and tap Mark next to each student's name, or enter a student ID for a walk-in."/> : null}
 
       {/* Slot + date picker */}
       <Card>
@@ -128,10 +128,10 @@ export function MarkAttendancePage({ hideHeader = false }) {
       <Card>
         <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-1.5">
-            <Label htmlFor="mark-member-id">Mark by MongoDB member ID</Label>
+            <Label htmlFor="mark-member-id">Mark by student ID</Label>
             <div className="relative">
               <ScanLineIcon className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
-              <Input id="mark-member-id" placeholder="Enter the 24-character MongoDB ID" className="pl-8" value={memberIdInput} onChange={(e) => setMemberIdInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && markByMemberId()} disabled={!slotId}/>
+              <Input id="mark-member-id" placeholder="Enter student ID" className="pl-8" value={memberIdInput} onChange={(e) => setMemberIdInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && markByMemberId()} disabled={!slotId}/>
             </div>
           </div>
           <Button onClick={markByMemberId} disabled={!slotId || !memberIdInput.trim() || manualSubmitting}>
