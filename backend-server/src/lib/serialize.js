@@ -189,6 +189,7 @@ export function toMembership(doc, planDoc) {
     discount: doc.discount ?? 0,
     /** Class quota snapshotted at enrollment; null = no quota. */
     classQuota: doc.classQuota ?? null,
+    carriedClasses: doc.carriedClasses ?? 0,
     source: doc.source,
     notes: doc.notes ?? null,
     createdBy: id(doc.createdBy),

@@ -115,6 +115,7 @@ export function MemberDetailPage() {
     }
     const current = member.data;
     const membership = current.membership;
+    const quota = current.quota;
     const isActive = current.status === "active";
     return (<div className="min-w-0 space-y-6">
       <PageHeader breadcrumbs={[{ label: "Students", to: "/members" }, { label: current.fullName }]} title={current.fullName} description={`Joined ${formatDate(current.joinDate)}`} actions={canEdit ? (<>
@@ -235,6 +236,23 @@ export function MemberDetailPage() {
                   </div>) : (<EmptyState icon={<CalendarDaysIcon className="size-5"/>} title="No membership assigned" description="Assign a plan to generate a valid QR card for this student." className="py-8" action={canEdit ? (<Button size="sm" onClick={() => setRenewOpen(true)}>
                           <WalletIcon className="size-4"/> Assign plan
                         </Button>) : undefined}/>)}
+                {membership ? (<div className="mt-4 rounded-lg border border-border/70 bg-card/60 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">Class balance</p>
+                      {quota && quota.status !== "none" ? (<Badge variant="outline">
+                          {quota.remaining} {quota.remaining === 1 ? "class" : "classes"} remaining
+                        </Badge>) : null}
+                    </div>
+                    {quota?.status === "none" ? (<p className="mt-1 text-xs text-muted-foreground">This plan has no class quota.</p>) : quota ? (<>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {quota.attended} attended of {quota.quota} total · {quota.remaining} remaining
+                          {quota.exceeded > 0 ? ` · ${quota.exceeded} over quota` : ""}
+                        </p>
+                        {membership.carriedClasses > 0 ? (<p className="mt-1 text-xs text-muted-foreground">
+                            {membership.carriedClasses} unused {membership.carriedClasses === 1 ? "class" : "classes"} carried forward
+                          </p>) : null}
+                      </>) : (<p className="mt-1 text-xs text-muted-foreground">Class balance is unavailable.</p>)}
+                  </div>) : null}
               </CardContent>
             </Card>
           </Stagger>

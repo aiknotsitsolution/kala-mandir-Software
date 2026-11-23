@@ -20,11 +20,12 @@ import { toMember, toMembership, toAttendance, toPayment, ymd } from "../lib/ser
 import { generateQrToken } from "../lib/qr.js";
 import { writeAudit, pick } from "../lib/audit.js";
 import { planEndDate, renewalStartDate, currentMembership, effectiveStatus } from "../lib/membership.js";
-import { quotaForPlan, computeQuota } from "../lib/quota.js";
+import { quotaForPlan, quotaForRenewal, computeQuota } from "../lib/quota.js";
 import { parseDateOnly, ymdInTz } from "../lib/dates.js";
 import { loadGymContext } from "../services/context.js";
 import { decorateAllMembers, decorateMember } from "../services/members.js";
 import { createPaymentRow } from "../services/payments.js";
+import { quotaForMembership } from "../services/quota.js";
 import { ensureMemberLogin, syncMemberLoginStatus } from "../lib/memberLogins.js";
 import { CLASS_TAGS } from "../lib/constants.js";
 
@@ -1096,6 +1097,8 @@ router.post(
         .session(session)
         .lean();
       const current = currentMembership(existing);
+      const previousQuota = current ? await quotaForMembership(current, session) : null;
+      const quotaSnapshot = quotaForRenewal(plan, previousQuota);
       // renewalStartDate expects date-only strings; lean docs hold BSON Dates.
       const currentForStart = current ? { endDate: ymd(current.endDate) } : null;
 
@@ -1121,7 +1124,8 @@ router.post(
             status: "active",
             price: plan.price,
             discount,
-            classQuota: quotaForPlan(plan),
+            classQuota: quotaSnapshot.classQuota,
+            carriedClasses: quotaSnapshot.carriedClasses,
             source: input.source ?? "renewal",
             notes: input.notes ?? null,
             createdBy: req.user.id,
@@ -1160,6 +1164,8 @@ router.post(
             endDate: ymd(end),
             price: plan.price,
             discount,
+            classQuota: quotaSnapshot.classQuota,
+            carriedClasses: quotaSnapshot.carriedClasses,
             source: row.source,
           },
         },

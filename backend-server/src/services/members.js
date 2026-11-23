@@ -5,6 +5,7 @@ import MemberMembership from "../models/MemberMembership.js";
 import MembershipPlan from "../models/MembershipPlan.js";
 import Tag from "../models/Tag.js";
 import { toMemberWithMembership } from "../lib/serialize.js";
+import { quotaForMembership } from "./quota.js";
 
 /** Non-cancelled memberships of a gym grouped by memberId. */
 export async function loadMembershipsByMember(gymId, session = null) {
@@ -72,5 +73,7 @@ export async function decorateMember(memberDoc, ctx, session = null) {
     plan = await MembershipPlan.findById(current.planId).session(session).lean();
   }
   const tagById = await loadTagMap(memberDoc.gymId);
-  return joinTags(toMemberWithMembership(memberDoc, current, plan, ctx), tagById);
+  const member = toMemberWithMembership(memberDoc, current, plan, ctx);
+  member.quota = current ? await quotaForMembership(current, session) : null;
+  return joinTags(member, tagById);
 }

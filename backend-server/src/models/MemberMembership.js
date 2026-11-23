@@ -25,6 +25,8 @@ const MemberMembershipSchema = new Schema(
      * (duration-only / legacy plans). Never re-read from the plan afterwards.
      */
     classQuota: { type: Number, default: null, min: 0 },
+    /** Unused classes transferred from the previous membership at renewal. */
+    carriedClasses: { type: Number, default: 0, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
     source: {
       type: String,

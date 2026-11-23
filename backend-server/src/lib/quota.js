@@ -91,6 +91,24 @@ export function quotaForPlan(plan) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+/** Add unused classes from the previous membership to a renewed quota plan. */
+export function quotaForRenewal(plan, previousQuota) {
+  const planQuota = quotaForPlan(plan);
+  if (planQuota == null) {
+    return { classQuota: null, carriedClasses: 0 };
+  }
+
+  const remaining = Number(previousQuota?.remaining);
+  const carriedClasses =
+    previousQuota?.quota == null || !Number.isFinite(remaining)
+      ? 0
+      : Math.max(0, Math.trunc(remaining));
+  return {
+    classQuota: planQuota + carriedClasses,
+    carriedClasses,
+  };
+}
+
 /** Short human label for a plan's quota ("12 classes/month" or "—"). */
 export function planQuotaLabel(plan) {
   const quota = quotaForPlan(plan);
