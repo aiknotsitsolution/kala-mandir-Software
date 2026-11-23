@@ -10,6 +10,7 @@ import { authCheckFailed, authCheckStarted, authSessionChanged } from "@/store/a
 const MUTATING_METHODS = new Set([
     "updateProfile", "updateSettings",
     "createMember", "updateMember", "deleteMember", "setMemberStatus",
+    "sendStudentRegistrationOtp", "verifyStudentRegistrationOtp",
     "renewMembership", "setMembershipStatus", "rotateQrToken",
     "createPlan", "updatePlan", "archivePlan",
     "checkInByToken", "checkInByMemberId", "recordCheckout", "correctAttendance", "remindCheckout",
@@ -77,7 +78,12 @@ export function AuthProvider({ children }) {
         const unsubscribe = getAuthProvider().onAuthChange((next) => {
             setAuthSession(dispatch, next);
         });
-        return unsubscribe;
+        const handleAuthExpired = () => setAuthSession(dispatch, null);
+        window.addEventListener("kalamandir:auth-expired", handleAuthExpired);
+        return () => {
+            unsubscribe();
+            window.removeEventListener("kalamandir:auth-expired", handleAuthExpired);
+        };
     }, [dispatch, refresh, mode]);
     // Institute-wide theme (admin sets it in Manage Institute) drives the whole
     // platform — staff app + member portal + login screen.
@@ -94,18 +100,43 @@ export function useAuth() {
     const mode = appMode();
     const data = useMemo(() => dataServiceFor(session, dispatch), [session, dispatch]);
     const refresh = useCallback(() => refreshAuthSession(dispatch, mode), [dispatch, mode]);
-    const signIn = useCallback(async (credentials) => {
-        const next = await getAuthProvider().signIn(credentials);
+    const requestLoginOtp = useCallback((credentials) => {
+        return getAuthProvider().requestLoginOtp(credentials);
+    }, []);
+    const verifyLoginOtp = useCallback(async (challenge) => {
+        const next = await getAuthProvider().verifyLoginOtp(challenge);
         setAuthSession(dispatch, next);
         toast.success(`Welcome back, ${next.profile.fullName.split(" ")[0]}`);
         return next;
     }, [dispatch]);
+    const requestPasswordResetOtp = useCallback((email) => {
+        return getAuthProvider().requestPasswordResetOtp(email);
+    }, []);
+    const verifyPasswordResetOtp = useCallback((email, code) => {
+        return getAuthProvider().verifyPasswordResetOtp(email, code);
+    }, []);
+    const resetPasswordWithOtp = useCallback((input) => {
+        return getAuthProvider().resetPasswordWithOtp(input);
+    }, []);
     const signOut = useCallback(async () => {
         await getAuthProvider().signOut();
         setAuthSession(dispatch, null);
         toast.info("Signed out");
     }, [dispatch]);
-    return { session, data, loading, error, mode, signIn, signOut, refresh };
+    return {
+        session,
+        data,
+        loading,
+        error,
+        mode,
+        requestLoginOtp,
+        verifyLoginOtp,
+        requestPasswordResetOtp,
+        verifyPasswordResetOtp,
+        resetPasswordWithOtp,
+        signOut,
+        refresh,
+    };
 }
 
 export function useSession() {

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, ApiError, getAuthToken, setAuthToken } from "@/data/api/client";
+import { apiGet, apiPost, ApiError, getAuthToken, refreshAuthToken, setAuthToken } from "@/data/api/client";
 import { loadGym } from "@/data/api/service";
 import { gymTimezone } from "@/lib/datetime";
 /** Handles `{user: ...}` and the bare user object from GET /auth/me. */
@@ -10,11 +10,11 @@ function userFromMeResponse(payload) {
     return user;
 }
 /**
- * JWT-based auth against the REST backend.
+ * Access-token auth against the REST backend. The short-lived access token is
+ * held in memory; the refresh token is an HttpOnly cookie managed by the API.
  *
- * The token lives in localStorage (`kalamandir-token`) and is attached to every
- * request by the API client. `onAuthChange` is a local emitter fired by
- * login/sign-out — no websockets involved.
+ * `onAuthChange` is a local emitter fired by login/sign-out — no websockets
+ * involved.
  */
 export class ApiAuthProvider {
     mode = "api";
@@ -80,10 +80,8 @@ export class ApiAuthProvider {
             demo: false,
         };
     }
-    /**
-     * Sign in with an email address, account ID, or mobile number.
-     */
-    async signIn(credentials) {
+    /** Request a one-minute email OTP after validating the account password. */
+    async requestLoginOtp(credentials) {
         const identifier = String(credentials?.identifier ?? "").trim();
         const phone = String(credentials?.phone ?? "").trim();
         const password = String(credentials?.password ?? "");
@@ -98,11 +96,7 @@ export class ApiAuthProvider {
         if (phone)
             body.phone = phone;
         try {
-            const payload = await apiPost("/auth/login", body);
-            setAuthToken(payload.token);
-            const session = await this.buildSession(payload.user);
-            this.emit(session);
-            return session;
+            return await apiPost("/auth/login", body);
         }
         catch (err) {
             if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
@@ -111,18 +105,34 @@ export class ApiAuthProvider {
             throw err;
         }
     }
-    /** Alias matching the UI's vocabulary (`signIn` is the contract method). */
-    login(credentials) {
-        return this.signIn(credentials);
+    /** Verify the OTP and create the authenticated session. */
+    async verifyLoginOtp({ challengeId, code }) {
+        const payload = await apiPost("/auth/login/verify", { challengeId, code });
+        setAuthToken(payload.accessToken);
+        const session = await this.buildSession(payload.user);
+        this.emit(session);
+        return session;
+    }
+    async requestPasswordResetOtp(email) {
+        return apiPost("/auth/password/forgot", { email });
+    }
+    async verifyPasswordResetOtp(email, code) {
+        return apiPost("/auth/password/reset/verify", { email, code });
+    }
+    async resetPasswordWithOtp(input) {
+        return apiPost("/auth/password/reset", input);
     }
     async getSession() {
-        if (!getAuthToken())
-            return null;
         try {
+            if (!getAuthToken()) {
+                await refreshAuthToken();
+            }
             const payload = await apiGet("/auth/me");
             const user = userFromMeResponse(payload);
-            if (!user)
+            if (!user) {
+                setAuthToken(null);
                 return null;
+            }
             return await this.buildSession(user);
         }
         catch (err) {
@@ -134,8 +144,12 @@ export class ApiAuthProvider {
         }
     }
     async signOut() {
-        setAuthToken(null);
-        this.emit(null);
+        try {
+            await apiPost("/auth/logout", {});
+        } finally {
+            setAuthToken(null);
+            this.emit(null);
+        }
     }
     onAuthChange(cb) {
         this.listeners.add(cb);

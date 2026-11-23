@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeftIcon, CalendarDaysIcon, ClockIcon, CreditCardIcon, MailIcon, MapPinIcon, PencilIcon, PhoneIcon, QrCodeIcon, RefreshCwIcon, ShieldAlertIcon, TagIcon, UserRoundXIcon, UserXIcon, UserCheckIcon, WalletIcon, } from "lucide-react";
+import { ArrowLeftIcon, CalendarDaysIcon, ClockIcon, CreditCardIcon, MailCheckIcon, MailIcon, MapPinIcon, PencilIcon, PhoneIcon, QrCodeIcon, RefreshCwIcon, ShieldAlertIcon, TagIcon, UserRoundXIcon, UserXIcon, UserCheckIcon, WalletIcon, } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState, ErrorState, Skeleton, Stagger } from "@/components/shared/States";
 import { StatusBadge, PaymentBadge } from "@/components/shared/StatusBadge";
@@ -9,6 +9,9 @@ import { SmartImage } from "@/components/shared/SmartImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table";
@@ -45,6 +48,10 @@ export function MemberDetailPage() {
     const [renewOpen, setRenewOpen] = useState(false);
     const [rotateOpen, setRotateOpen] = useState(false);
     const [statusOpen, setStatusOpen] = useState(false);
+    const [verificationOpen, setVerificationOpen] = useState(false);
+    const [verificationChallenge, setVerificationChallenge] = useState(null);
+    const [verificationCode, setVerificationCode] = useState("");
+    const [verificationBusy, setVerificationBusy] = useState(false);
     const reloadAll = () => {
         member.reload();
         history.reload();
@@ -91,6 +98,51 @@ export function MemberDetailPage() {
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Unable to change the student status.");
             return false;
+        }
+    };
+    const sendStudentVerification = async () => {
+        if (!member.data)
+            return;
+        try {
+            const result = await data.sendStudentRegistrationOtp(member.data.id);
+            if (result.status === "password_setup_sent") {
+                toast.success("Password setup link sent to the student.");
+                setVerificationOpen(false);
+                member.reload();
+                return;
+            }
+            if (result.status === "already_verified") {
+                toast.info("Student email is already verified. They can sign in or use Forgot password.");
+                setVerificationOpen(false);
+                member.reload();
+                return;
+            }
+            setVerificationChallenge(result);
+            setVerificationCode("");
+            setVerificationOpen(true);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to send a verification email.");
+        }
+    };
+    const verifyStudentEmail = async () => {
+        if (!member.data || !verificationChallenge?.challengeId || verificationCode.length !== 6)
+            return;
+        setVerificationBusy(true);
+        try {
+            const result = await data.verifyStudentRegistrationOtp(member.data.id, verificationChallenge.challengeId, verificationCode);
+            if (result?.status === "password_setup_sent") {
+                toast.success("Email verified. A password setup link was sent to the student.");
+            } else if (result?.notificationDelivery === "failed") {
+                toast.error("Email verified. The student can sign in, but the confirmation email could not be sent.");
+            } else {
+                toast.success("Email verified. The student can now sign in.");
+            }
+            setVerificationOpen(false);
+            member.reload();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to verify this email.");
+        } finally {
+            setVerificationBusy(false);
         }
     };
     if (member.loading) {
@@ -252,6 +304,16 @@ export function MemberDetailPage() {
                             {membership.carriedClasses} unused {membership.carriedClasses === 1 ? "class" : "classes"} carried forward
                           </p>) : null}
                       </>) : (<p className="mt-1 text-xs text-muted-foreground">Class balance is unavailable.</p>)}
+                  </div>) : null}
+                {current.emailVerificationPending && canEdit ? (<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4">
+                    <div className="flex items-start gap-2">
+                      <MailCheckIcon className="mt-0.5 size-4 text-warning"/>
+                      <div>
+                        <p className="text-sm font-medium">Student portal setup pending</p>
+                        <p className="text-xs text-muted-foreground">Verify the student email or resend the password setup link.</p>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={sendStudentVerification}>Verify / resend email</Button>
                   </div>) : null}
               </CardContent>
             </Card>
@@ -420,5 +482,34 @@ export function MemberDetailPage() {
       <ConfirmActionDialog open={statusOpen} onOpenChange={setStatusOpen} icon={isActive ? UserXIcon : UserCheckIcon} title={isActive ? `Deactivate ${current.fullName}?` : `Reactivate ${current.fullName}?`} description={isActive
             ? "Deactivated members cannot check in with QR. Their history and payments stay intact and you can reactivate them at any time."
             : "the student will be able to check in again as long as they have a valid membership."} cancelLabel="Cancel" confirmLabel={isActive ? "Deactivate member" : "Reactivate member"} onConfirm={handleToggleStatus}/>
+
+      <Dialog open={verificationOpen} onOpenChange={setVerificationOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verify student email</DialogTitle>
+            <DialogDescription>Enter the 6-digit code sent to {current.email}. The code expires in 1 minute.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="member-verification-otp">Email verification code</Label>
+            <Input
+              id="member-verification-otp"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={verificationCode}
+              onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="6-digit code"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setVerificationOpen(false)} disabled={verificationBusy}>Close</Button>
+            <Button type="button" variant="ghost" onClick={sendStudentVerification} disabled={verificationBusy}>Resend code / setup link</Button>
+            <Button type="button" onClick={verifyStudentEmail} disabled={verificationBusy || verificationCode.length !== 6}>
+              {verificationBusy ? "Verifying…" : "Verify email"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>);
 }

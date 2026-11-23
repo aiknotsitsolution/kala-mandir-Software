@@ -37,6 +37,8 @@ export const memberFormSchema = z
         .max(254)
         .optional()
         .or(z.literal("")),
+    password: z.string().optional(),
+    confirmPassword: z.string().optional(),
     phone: z.string().regex(/^\d{10}$/, "Enter a 10-digit mobile number"),
     dateOfBirth: z.union([dateOnlySchema, z.literal("")]).optional(),
     /** Age in years (collected at registration; DOB still supported). */
@@ -58,14 +60,7 @@ export const memberFormSchema = z
     joinDate: dateOnlySchema,
     planId: z.string().min(1, "Choose a membership plan"),
     membershipStart: dateOnlySchema,
-    // Individually chosen password. Required when CREATING a student (set below
-    // via superRefine on `mode`); ignored when editing an existing one.
-    loginPassword: z
-        .string()
-        .optional()
-        .refine((v) => !v || v.trim().length >= 6, "Portal password must be at least 6 characters"),
-    // Hidden form flag — "create" requires loginPassword, "edit" does not.
-    // Never sent to the API.
+    // Hidden form flag — distinguishes required create fields from optional edits.
     mode: z.enum(["create", "edit"]).optional(),
     initialPayment: z
         .number()
@@ -107,12 +102,25 @@ export const memberFormSchema = z
     path: ["emergencyContactPhone"],
 })
     .superRefine((data, ctx) => {
-    // New students get an individually chosen password; edits never touch it.
-    if (data.mode !== "edit" && !data.loginPassword?.trim()) {
+    if (data.mode !== "edit" && !data.email?.trim()) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            path: ["loginPassword"],
-            message: "Set a portal password for the student",
+            path: ["email"],
+            message: "Student email is required for OTP verification",
+        });
+    }
+    if (data.mode !== "edit" && (!data.password || data.password.length < 8)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["password"],
+            message: "Password must be at least 8 characters",
+        });
+    }
+    if (data.mode !== "edit" && data.password !== data.confirmPassword) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["confirmPassword"],
+            message: "Passwords do not match",
         });
     }
     // New students must select at least one class stream.

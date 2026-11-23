@@ -232,6 +232,12 @@ export class ApiDataService {
         const row = await apiPost("/members", input);
         return this.decorateMember(row);
     }
+    async sendStudentRegistrationOtp(memberId) {
+        return apiPost(`/members/${encodeURIComponent(memberId)}/registration-otp`);
+    }
+    async verifyStudentRegistrationOtp(memberId, challengeId, code) {
+        return apiPost(`/members/${encodeURIComponent(memberId)}/registration-otp/verify`, { challengeId, code });
+    }
     async updateMember(id, input) {
         const row = await apiPatch(`/members/${encodeURIComponent(id)}`, input);
         return this.decorateMember(row);

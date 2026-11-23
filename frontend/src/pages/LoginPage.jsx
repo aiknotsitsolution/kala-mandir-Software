@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "motion/react";
-import { EyeIcon, EyeOffIcon, Loader2Icon, LockKeyholeIcon, Music2Icon, QrCodeIcon, } from "lucide-react";
+import { ArrowLeftIcon, EyeIcon, EyeOffIcon, Loader2Icon, LockKeyholeIcon, MailCheckIcon, Music2Icon, QrCodeIcon, } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,20 +38,70 @@ function GoldOrnament({ className }) {
 }
 
 export function LoginPage() {
-    const { session, signIn, loading } = useAuth();
+    const {
+        session,
+        requestLoginOtp,
+        verifyLoginOtp,
+        requestPasswordResetOtp,
+        verifyPasswordResetOtp,
+        resetPasswordWithOtp,
+        loading,
+    } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const reduceMotion = useReducedMotion();
     const [showPassword, setShowPassword] = useState(false);
     const [serverError, setServerError] = useState(null);
     const [heroFailed, setHeroFailed] = useState(false);
+    const [loginChallenge, setLoginChallenge] = useState(null);
+    const [loginCredentials, setLoginCredentials] = useState(null);
+    const [otp, setOtp] = useState("");
+    const [otpBusy, setOtpBusy] = useState(false);
+    const [secondsLeft, setSecondsLeft] = useState(0);
+    const [forgotPassword, setForgotPassword] = useState(false);
+    const [resetRequested, setResetRequested] = useState(false);
+    const [resetEmail, setResetEmail] = useState("");
+    const [resetCode, setResetCode] = useState("");
+    const [resetToken, setResetToken] = useState("");
+    const [resetPassword, setResetPassword] = useState("");
+    const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+    const [resetBusy, setResetBusy] = useState(false);
+    const [resetExpiresAt, setResetExpiresAt] = useState(null);
+    const [resetResendAt, setResetResendAt] = useState(null);
+    const [resetSecondsLeft, setResetSecondsLeft] = useState(0);
+    const [resetResendSecondsLeft, setResetResendSecondsLeft] = useState(0);
+    const [successMessage, setSuccessMessage] = useState("");
     // Set when the page was opened by scanning the studio's shared QR.
     const checkinToken = useMemo(() => new URLSearchParams(location.search).get(GYM_CHECKIN_PARAM), [location.search]);
     const from = location.state?.from ?? "/";
     const portalCheckinUrl = checkinToken
         ? `/portal?${GYM_CHECKIN_PARAM}=${encodeURIComponent(checkinToken)}`
         : null;
-    const { register, handleSubmit, formState: { errors, isSubmitting }, } = useForm({
+    const loginChallengeId = loginChallenge?.challengeId;
+    const loginChallengeExpiry = loginChallenge?.expiresAt;
+    useEffect(() => {
+        if (!loginChallengeId || !loginChallengeExpiry)
+            return undefined;
+        const updateRemaining = () => {
+            const expiresAt = Date.parse(loginChallengeExpiry);
+            setSecondsLeft(Number.isFinite(expiresAt) ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)) : 0);
+        };
+        updateRemaining();
+        const timer = setInterval(updateRemaining, 1000);
+        return () => clearInterval(timer);
+    }, [loginChallengeId, loginChallengeExpiry]);
+    useEffect(() => {
+        if (!forgotPassword || !resetRequested || !resetExpiresAt || !resetResendAt)
+            return undefined;
+        const updateRemaining = () => {
+            setResetSecondsLeft(Math.max(0, Math.ceil((resetExpiresAt - Date.now()) / 1000)));
+            setResetResendSecondsLeft(Math.max(0, Math.ceil((resetResendAt - Date.now()) / 1000)));
+        };
+        updateRemaining();
+        const timer = setInterval(updateRemaining, 1000);
+        return () => clearInterval(timer);
+    }, [forgotPassword, resetRequested, resetExpiresAt, resetResendAt]);
+    const { register, handleSubmit, getValues, formState: { errors, isSubmitting }, } = useForm({
         resolver: zodResolver(loginSchema),
         defaultValues: {
             identifier: "",
@@ -66,24 +116,173 @@ export function LoginPage() {
     }
     const onSubmit = handleSubmit(async (values) => {
         setServerError(null);
+        setSuccessMessage("");
         try {
-            // One endpoint for everyone — the server resolves the role from the
-            // database and the router sends staff to the dashboard, members to
-            // their portal. Sign in with email, account ID or a mobile number.
-            const next = await signIn({
+            const credentials = {
                 identifier: values.identifier,
                 phone: values.phone,
                 password: values.password,
-            });
+            };
+            const challenge = await requestLoginOtp(credentials);
+            setLoginCredentials(credentials);
+            setLoginChallenge(challenge);
+            setOtp("");
+        }
+        catch (error) {
+            setServerError(error instanceof Error ? error.message : "Sign in failed.");
+        }
+    });
+    const handleOtpSubmit = async (event) => {
+        event.preventDefault();
+        if (!loginChallenge || secondsLeft <= 0 || otpBusy)
+            return;
+        setServerError(null);
+        setOtpBusy(true);
+        try {
+            const next = await verifyLoginOtp({ challengeId: loginChallenge.challengeId, code: otp });
             const target = portalCheckinUrl && next?.profile.role === "member"
                 ? portalCheckinUrl
                 : from;
             navigate(target, { replace: true });
         }
         catch (error) {
-            setServerError(error instanceof Error ? error.message : "Sign in failed.");
+            setServerError(error instanceof Error ? error.message : "Code verification failed.");
+        } finally {
+            setOtpBusy(false);
         }
-    });
+    };
+    const resendOtp = async () => {
+        if (!loginCredentials || otpBusy)
+            return;
+        setServerError(null);
+        setOtpBusy(true);
+        try {
+            setLoginChallenge(await requestLoginOtp(loginCredentials));
+            setOtp("");
+        } catch (error) {
+            setServerError(error instanceof Error ? error.message : "Unable to resend the code.");
+        } finally {
+            setOtpBusy(false);
+        }
+    };
+    const requestResetCode = async () => {
+        const email = resetEmail.trim();
+        if (!email) {
+            setServerError("Enter the email address linked to your account.");
+            return;
+        }
+        setServerError(null);
+        setSuccessMessage("");
+        setResetBusy(true);
+        try {
+            const result = await requestPasswordResetOtp(email);
+            const now = Date.now();
+            setResetEmail(email);
+            setResetRequested(true);
+            setResetToken("");
+            const serverExpiry = Date.parse(result?.expiresAt);
+            setResetExpiresAt(Number.isFinite(serverExpiry) ? serverExpiry : now + 60_000);
+            setResetResendAt(now + 30_000);
+            setResetCode("");
+            setResetPassword("");
+            setResetConfirmPassword("");
+        } catch (error) {
+            setServerError(error instanceof Error ? error.message : "Unable to request a password reset.");
+        } finally {
+            setResetBusy(false);
+        }
+    };
+    const submitResetRequest = (event) => {
+        event.preventDefault();
+        void requestResetCode();
+    };
+    const verifyResetCode = async (event) => {
+        event.preventDefault();
+        if (resetBusy)
+            return;
+        setServerError(null);
+        if (resetSecondsLeft <= 0) {
+            setServerError("The verification code has expired. Request a new code.");
+            return;
+        }
+        setResetBusy(true);
+        try {
+            const result = await verifyPasswordResetOtp(resetEmail, resetCode);
+            setResetToken(result.token);
+            setResetPassword("");
+            setResetConfirmPassword("");
+        } catch (error) {
+            setServerError(error instanceof Error ? error.message : "Unable to verify this email.");
+        } finally {
+            setResetBusy(false);
+        }
+    };
+    const submitPasswordReset = async (event) => {
+        event.preventDefault();
+        if (resetBusy)
+            return;
+        setServerError(null);
+        if (!resetToken) {
+            setServerError("Verify your email before choosing a new password.");
+            return;
+        }
+        if (resetPassword.length < 8) {
+            setServerError("Password must be at least 8 characters.");
+            return;
+        }
+        if (resetPassword !== resetConfirmPassword) {
+            setServerError("Passwords do not match.");
+            return;
+        }
+        setResetBusy(true);
+        try {
+            const result = await resetPasswordWithOtp({
+                token: resetToken,
+                newPassword: resetPassword,
+                confirmPassword: resetConfirmPassword,
+            });
+            setForgotPassword(false);
+            setResetRequested(false);
+            setResetToken("");
+            setResetCode("");
+            setResetPassword("");
+            setResetConfirmPassword("");
+            setSuccessMessage(result?.notificationDelivery === "failed"
+                ? "Password updated. Sign in with your new password; the confirmation email could not be sent."
+                : "Password updated. Sign in with your new password.");
+        } catch (error) {
+            setServerError(error instanceof Error ? error.message : "Unable to reset your password.");
+        } finally {
+            setResetBusy(false);
+        }
+    };
+    const startPasswordReset = () => {
+        const identifier = String(getValues("identifier") ?? "").trim();
+        setResetEmail(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier) ? identifier : "");
+        setResetRequested(false);
+        setResetToken("");
+        setResetCode("");
+        setResetPassword("");
+        setResetConfirmPassword("");
+        setServerError(null);
+        setSuccessMessage("");
+        setForgotPassword(true);
+    };
+    const backToLogin = () => {
+        setForgotPassword(false);
+        setResetRequested(false);
+        setResetToken("");
+        setResetCode("");
+        setResetPassword("");
+        setResetConfirmPassword("");
+        setServerError(null);
+    };
+    const returnToLogin = () => {
+        setLoginChallenge(null);
+        setLoginCredentials(null);
+        setOtp("");
+        setServerError(null);
+    };
     // Cinematic, barely-there background drift — disabled when reduced motion.
     const heroImgAnimate = reduceMotion
         ? { opacity: 1 }
@@ -173,9 +372,13 @@ export function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <h2 className="font-display text-3xl font-semibold tracking-tight">Welcome to Kala Mandir</h2>
+            <h2 className="font-display text-3xl font-semibold tracking-tight">
+              {forgotPassword ? "Reset your password" : "Welcome to Kala Mandir"}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Sign in to continue your artistic journey.
+              {forgotPassword
+                ? "Verify your email and choose a new password."
+                : "Sign in to continue your artistic journey."}
             </p>
             <GoldOrnament className="mt-3 block text-km-gold-muted"/>
           </div>
@@ -190,11 +393,167 @@ export function LoginPage() {
 
           {serverError ? (<Alert variant="destructive" className="mt-6 border-destructive/40">
               <LockKeyholeIcon className="size-4"/>
-              <AlertTitle>Sign in failed</AlertTitle>
+              <AlertTitle>{loginChallenge ? "Verification failed" : forgotPassword ? "Password reset failed" : "Sign in failed"}</AlertTitle>
               <AlertDescription>{serverError}</AlertDescription>
             </Alert>) : null}
+          {successMessage ? (<Alert className="mt-6 border-success/40 bg-success/5">
+              <MailCheckIcon className="size-4 text-success"/>
+              <AlertTitle>Password updated</AlertTitle>
+              <AlertDescription>{successMessage}</AlertDescription>
+            </Alert>) : null}
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+          {loginChallenge ? (<form key="login-otp" onSubmit={handleOtpSubmit} className="mt-6 space-y-4" noValidate>
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <MailCheckIcon className="size-4 text-primary"/> Check your email
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  Enter the 6-digit code sent to {loginChallenge.email}. It expires in 1 minute.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {secondsLeft > 0 ? `Code expires in 0:${String(secondsLeft).padStart(2, "0")}` : "This code has expired."}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-otp">Email verification code</Label>
+                <Input
+                  id="login-otp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="6-digit code"
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={otpBusy || otp.length !== 6 || secondsLeft <= 0} className="h-11 w-full">
+                {otpBusy ? <Loader2Icon className="size-4 animate-spin"/> : <MailCheckIcon className="size-4"/>}
+                {otpBusy ? "Verifying…" : "Verify and sign in"}
+              </Button>
+              <div className="flex items-center justify-between text-sm">
+                <Button type="button" variant="ghost" size="sm" onClick={returnToLogin} disabled={otpBusy}>
+                  <ArrowLeftIcon className="size-4"/> Back to login
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={resendOtp} disabled={otpBusy || secondsLeft > 0}>
+                  Resend code
+                </Button>
+              </div>
+            </form>) : forgotPassword ? (!resetRequested ? (<form key="password-reset-request" onSubmit={submitResetRequest} className="mt-6 space-y-4" noValidate>
+              <div className="space-y-2">
+                <Label htmlFor="reset-email">Account email</Label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  autoComplete="email"
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={resetBusy || !resetEmail.trim()} className="h-11 w-full">
+                {resetBusy ? <Loader2Icon className="size-4 animate-spin"/> : <MailCheckIcon className="size-4"/>}
+                {resetBusy ? "Sending code…" : "Send verification code"}
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={backToLogin} disabled={resetBusy}>
+                <ArrowLeftIcon className="size-4"/> Back to sign in
+              </Button>
+            </form>) : !resetToken ? (<form key="password-reset-verify" onSubmit={verifyResetCode} className="mt-6 space-y-4" noValidate>
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <MailCheckIcon className="size-4 text-primary"/> Check your email
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  If a verified account uses this email, a 6-digit code has been sent. The code expires in 1 minute.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {resetSecondsLeft > 0 ? `Code expires in 0:${String(resetSecondsLeft).padStart(2, "0")}` : "This code has expired. Request a new one."}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reset-code">Email verification code</Label>
+                <Input
+                  id="reset-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={resetCode}
+                  onChange={(event) => setResetCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="6-digit code"
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={resetBusy || resetCode.length !== 6 || resetSecondsLeft <= 0} className="h-11 w-full">
+                {resetBusy ? <Loader2Icon className="size-4 animate-spin"/> : <MailCheckIcon className="size-4"/>}
+                {resetBusy ? "Verifying email…" : "Verify email"}
+              </Button>
+              <div className="flex items-center justify-between text-sm">
+                <Button type="button" variant="ghost" size="sm" onClick={backToLogin} disabled={resetBusy}>
+                  <ArrowLeftIcon className="size-4"/> Back to sign in
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={requestResetCode} disabled={resetBusy || resetResendSecondsLeft > 0}>
+                  {resetResendSecondsLeft > 0 ? `Resend in ${resetResendSecondsLeft}s` : "Resend code"}
+                </Button>
+              </div>
+            </form>) : (<form key="password-reset-complete" onSubmit={submitPasswordReset} className="mt-6 space-y-4" noValidate>
+              <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium text-success">
+                  <MailCheckIcon className="size-4"/> Email verified
+                </div>
+                <p className="mt-1 text-muted-foreground">Choose a new password for your account.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reset-new-password">New password</Label>
+                <Input
+                  id="reset-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={72}
+                  value={resetPassword}
+                  onChange={(event) => setResetPassword(event.target.value)}
+                  required
+                />
+                {resetPassword && resetPassword.length < 8 ? <p className="text-xs text-destructive">Use at least 8 characters.</p> : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reset-confirm-password">Confirm new password</Label>
+                <Input
+                  id="reset-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={72}
+                  value={resetConfirmPassword}
+                  onChange={(event) => setResetConfirmPassword(event.target.value)}
+                  required
+                />
+                {resetConfirmPassword && resetPassword !== resetConfirmPassword ? <p className="text-xs text-destructive">Passwords do not match.</p> : null}
+              </div>
+              <Button
+                type="submit"
+                disabled={resetBusy || resetCode.length !== 6 || resetSecondsLeft <= 0 || resetPassword.length < 8 || resetPassword !== resetConfirmPassword}
+                className="h-11 w-full"
+              >
+                {resetBusy ? <Loader2Icon className="size-4 animate-spin"/> : <LockKeyholeIcon className="size-4"/>}
+                {resetBusy ? "Updating password…" : "Update password"}
+              </Button>
+              <div className="flex items-center justify-between text-sm">
+                <Button type="button" variant="ghost" size="sm" onClick={backToLogin} disabled={resetBusy}>
+                  <ArrowLeftIcon className="size-4"/> Back to sign in
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => {
+                    setResetToken("");
+                    setResetRequested(false);
+                    setResetCode("");
+                }} disabled={resetBusy}>
+                  Start over
+                </Button>
+              </div>
+            </form>)) : (<form key="login" onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
             <div className="space-y-2">
               <Label htmlFor="identifier">Email or account ID</Label>
               <Input id="identifier" type="text" autoComplete="username" placeholder="Email or account ID" {...register("identifier")}/>
@@ -224,16 +583,23 @@ export function LoginPage() {
               {errors.password ? <p className="text-xs text-destructive">{errors.password.message}</p> : null}
             </div>
 
+            <div className="flex justify-end">
+              <button type="button" onClick={startPasswordReset} className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+                Forgot password?
+              </button>
+            </div>
+
             {/* Premium burgundy button with a subtle gold hover treatment */}
             <Button type="submit" disabled={isSubmitting} className="group relative h-11 w-full bg-primary font-medium tracking-wide text-primary-foreground shadow-[0_12px_28px_-18px_rgba(49,13,32,0.9)] transition-all duration-300 hover:bg-km-wine hover:text-km-ivory hover:shadow-[0_0_0_1px_rgba(198,164,91,0.55),0_14px_30px_-16px_rgba(198,164,91,0.65)]">
               {isSubmitting ? <Loader2Icon className="size-4 animate-spin"/> : <Music2Icon className="size-4 text-km-gold transition-colors group-hover:text-km-gold"/>}
               {isSubmitting ? "Signing in…" : "Sign in"}
             </Button>
-          </form>
+          </form>)}
 
           <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
-            Staff and students sign in here with email, account ID or mobile number.
-            Student accounts are created at the front desk — no self-registration.
+            {forgotPassword
+              ? "Your password reset code can only be used once and expires in 1 minute."
+              : "Admin and students sign in here with email, account ID or mobile number. A verification code is required at every login."}
           </p>
         </motion.div>
       </section>

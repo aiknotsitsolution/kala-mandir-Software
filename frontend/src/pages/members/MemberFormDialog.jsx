@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { EyeIcon, EyeOffIcon, Loader2Icon, PlusIcon } from "lucide-react";
+import { Loader2Icon, MailCheckIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,6 +42,8 @@ function emptyValues() {
     return {
         fullName: "",
         email: "",
+        password: "",
+        confirmPassword: "",
         phone: "",
         dateOfBirth: "",
         // NaN renders an empty number input and validates as "not set".
@@ -53,8 +55,6 @@ function emptyValues() {
         planId: "",
         membershipStart: today,
         classTags: [],
-        loginPassword: "",
-        // Hidden flag: "create" requires a login password, "edit" does not.
         mode: "create",
         photoUrl: "",
         notes: "",
@@ -133,10 +133,11 @@ function toCreateInput(values, method, recordPayment) {
     const identity = toIdentityInput(values);
     return {
         ...identity,
+        password: values.password,
+        confirmPassword: values.confirmPassword,
         // Every selected class slot becomes its own recurring enrollment.
         planId: values.planId,
         membershipStart: values.membershipStart,
-        loginPassword: trimOrNull(values.loginPassword) ?? undefined,
         initialPayment: recordPayment && typeof amount === "number" && amount > 0
             ? { amount, method, paymentDate: toDateOnly(new Date()) }
             : null,
@@ -154,7 +155,9 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
     const navigate = useNavigate();
     const [recordPayment, setRecordPayment] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState("cash");
-    const [showPassword, setShowPassword] = useState(false);
+    const [registrationChallenge, setRegistrationChallenge] = useState(null);
+    const [registrationOtp, setRegistrationOtp] = useState("");
+    const [otpSecondsLeft, setOtpSecondsLeft] = useState(0);
     const { register, handleSubmit, control, reset, watch, setValue, formState: { errors, dirtyFields }, } = useForm({
         resolver: zodResolver(memberFormSchema),
         defaultValues: emptyValues(),
@@ -192,7 +195,8 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
             return;
         setRecordPayment(false);
         setPaymentMethod("cash");
-        setShowPassword(false);
+        setRegistrationChallenge(null);
+        setRegistrationOtp("");
         if (!member) {
             reset(emptyValues());
             return;
@@ -217,13 +221,22 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
             age: typeof member.age === "number" && member.age > 0 ? member.age : Number.NaN,
             // Hidden in edit mode; the schema only requires it on create.
             mode: "edit",
-            // Hidden in edit mode, but the schema still requires non-empty values.
-            // They are never sent to `updateMember`, so a placeholder is safe.
             planId: member.membership?.planId ?? member.id,
             membershipStart: member.membership?.startDate ?? toDateOnly(member.joinDate),
-            loginPassword: "",
         });
     }, [open, member, reset]);
+    const registrationChallengeExpiry = registrationChallenge?.expiresAt;
+    useEffect(() => {
+        if (!registrationChallenge?.challengeId || !registrationChallengeExpiry)
+            return undefined;
+        const updateRemaining = () => {
+            const expiresAt = Date.parse(registrationChallengeExpiry);
+            setOtpSecondsLeft(Number.isFinite(expiresAt) ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)) : 0);
+        };
+        updateRemaining();
+        const timer = setInterval(updateRemaining, 1000);
+        return () => clearInterval(timer);
+    }, [registrationChallenge?.challengeId, registrationChallengeExpiry]);
     const submit = handleSubmit((values) => {
         void run(async () => {
             try {
@@ -237,6 +250,19 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
                 const saved = await onSave(member
                     ? { mode: "update", input }
                     : { mode: "create", input });
+                if (!member) {
+                    setValue("password", "");
+                    setValue("confirmPassword", "");
+                }
+                if (!member && saved?.emailVerification) {
+                    setRegistrationChallenge({
+                        memberId: saved.id,
+                        email: saved.email,
+                        ...saved.emailVerification,
+                    });
+                    setRegistrationOtp("");
+                    return;
+                }
                 if (saved)
                     onOpenChange(false);
             }
@@ -249,18 +275,111 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
         const msg = (firstKey && errors[firstKey]?.message) || "Please fix the highlighted fields before saving.";
         toast.error(msg);
     });
+    const verifyRegistration = () => {
+        if (!registrationChallenge?.challengeId || registrationOtp.length !== 6)
+            return;
+        void run(async () => {
+            try {
+                const result = await data.verifyStudentRegistrationOtp(
+                    registrationChallenge.memberId,
+                    registrationChallenge.challengeId,
+                    registrationOtp,
+                );
+                if (result?.status === "password_setup_sent") {
+                    toast.success("Email verified. A password setup link was sent to the student.");
+                } else if (result?.notificationDelivery === "failed") {
+                    toast.error("Email verified. The student can sign in, but the confirmation email could not be sent.");
+                } else {
+                    toast.success("Email verified. The student can now sign in.");
+                }
+                setRegistrationChallenge(null);
+                onOpenChange(false);
+            } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Unable to verify this email.");
+            }
+        });
+    };
+    const resendRegistrationEmail = () => {
+        if (!registrationChallenge?.memberId)
+            return;
+        void run(async () => {
+            try {
+                const result = await data.sendStudentRegistrationOtp(registrationChallenge.memberId);
+                if (result.status === "already_verified") {
+                    toast.info("Student email is already verified. They can sign in or use Forgot password.");
+                    setRegistrationChallenge(null);
+                    onOpenChange(false);
+                    return;
+                }
+                setRegistrationChallenge({
+                    ...registrationChallenge,
+                    ...result,
+                });
+                setRegistrationOtp("");
+                if (result.status === "password_setup_sent") {
+                    toast.success("Password setup link sent to the student.");
+                    setRegistrationChallenge(null);
+                    onOpenChange(false);
+                } else {
+                    toast.success("A new verification code was sent.");
+                }
+            } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Unable to send a verification email.");
+            }
+        });
+    };
     return (<Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit student" : "Add student"}</DialogTitle>
+          <DialogTitle>{registrationChallenge ? "Verify student email" : isEdit ? "Edit student" : "Add student"}</DialogTitle>
           <DialogDescription>
-            {isEdit
+            {registrationChallenge
+            ? `Enter the code sent to ${registrationChallenge.email || "the student email"} to verify the account.`
+            : isEdit
             ? "Update personal details, contact information, emergency contact and class slots."
-            : "Create A student profile and assign their first membership."}
+            : "Create the student profile, assign their first membership and verify their email."}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={submit} noValidate className="space-y-4">
+        {registrationChallenge ? (<div className="space-y-4">
+            {registrationChallenge.status === "delivery_failed" ? (<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                The student was added, but the verification email could not be sent. Check the email server settings and try again.
+              </div>) : registrationChallenge.status === "password_setup_sent" ? (<div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                The student email is verified. A one-time password setup link has been sent.
+              </div>) : (<div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                The 6-digit code expires in 1 minute. Ask the student for the code delivered to their email.
+                {otpSecondsLeft > 0 ? <p className="mt-1 text-xs text-muted-foreground">Expires in 0:{String(otpSecondsLeft).padStart(2, "0")}</p> : null}
+              </div>)}
+            {registrationChallenge.challengeId ? (<div className="space-y-2">
+                <Label htmlFor="student-registration-otp">Student email code</Label>
+                <Input
+                  id="student-registration-otp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={registrationOtp}
+                  onChange={(event) => setRegistrationOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="6-digit code"
+                />
+              </div>) : null}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Close</Button>
+              {registrationChallenge.challengeId ? (<Button type="button" onClick={verifyRegistration} disabled={submitting || registrationOtp.length !== 6}>
+                  {submitting ? <Loader2Icon className="size-4 animate-spin"/> : <MailCheckIcon className="size-4"/>}
+                  Verify email
+                </Button>) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={resendRegistrationEmail}
+                disabled={submitting || (registrationChallenge.challengeId != null && otpSecondsLeft > 0)}
+              >
+                {submitting ? <Loader2Icon className="size-4 animate-spin"/> : null}
+                {registrationChallenge.status === "delivery_failed" ? "Send verification email" : "Resend code / setup link"}
+              </Button>
+            </DialogFooter>
+          </div>) : (<form onSubmit={submit} noValidate className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="member-name">Full name</Label>
@@ -276,7 +395,7 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="member-email">Email</Label>
+              <Label htmlFor="member-email">{isEdit ? "Email" : "Email (required for OTP verification)"}</Label>
               <Input id="member-email" type="email" placeholder="student@kalamandir.com" {...register("email")}/>
               {errors.email ? <p className="text-xs text-destructive">{errors.email.message}</p> : null}
             </div>
@@ -301,6 +420,22 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
               </div>
               {errors.phone ? <p className="text-xs text-destructive">{errors.phone.message}</p> : null}
             </div>
+
+            {!isEdit ? (<>
+                <div className="space-y-2">
+                  <Label htmlFor="member-password">Student portal password</Label>
+                  <Input id="member-password" type="password" autoComplete="new-password" placeholder="At least 8 characters" {...register("password")}/>
+                  {errors.password ? <p className="text-xs text-destructive">{errors.password.message}</p> : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="member-confirm-password">Confirm password</Label>
+                  <Input id="member-confirm-password" type="password" autoComplete="new-password" placeholder="Enter the password again" {...register("confirmPassword")}/>
+                  {errors.confirmPassword ? <p className="text-xs text-destructive">{errors.confirmPassword.message}</p> : null}
+                </div>
+                <p className="text-[11px] text-muted-foreground sm:col-span-2">
+                  The password is not emailed. Share it securely with the student; they can reset it later from the sign-in page.
+                </p>
+              </>) : null}
 
             <div className="space-y-2">
               <Label htmlFor="member-dob">Date of birth</Label>
@@ -557,20 +692,6 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <p className="text-sm font-medium sm:col-span-2">Student portal login</p>
-
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="member-login-password">Portal password</Label>
-                  <div className="relative">
-                    <Input id="member-login-password" type={showPassword ? "text" : "password"} placeholder="Set a password (min. 6 characters)" autoComplete="new-password" {...register("loginPassword")}/>
-                    <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"} className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition-colors hover:text-primary">
-                      {showPassword ? <EyeOffIcon className="size-4"/> : <EyeIcon className="size-4"/>}
-                    </button>
-                  </div>
-                  {errors.loginPassword ? (<p className="text-xs text-destructive">{errors.loginPassword.message}</p>) : null}
-                </div>
-              </div>
             </>) : null}
 
           <DialogFooter>
@@ -582,7 +703,7 @@ export function MemberFormDialog({ open, onOpenChange, member, plans, onSave, })
               {submitting ? "Saving…" : isEdit ? "Save changes" : "Add student"}
             </Button>
           </DialogFooter>
-        </form>
+        </form>)}
       </DialogContent>
     </Dialog>);
 }

@@ -5,6 +5,7 @@ import { AuthProvider, RequireAuth, useAuth } from "@/auth/AuthProvider";
 import { AppShell } from "@/components/layout/AppShell";
 const lazyPage = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 const LoginPage = lazyPage(() => import("@/pages/LoginPage"), "LoginPage");
+const SetPasswordPage = lazyPage(() => import("@/pages/SetPasswordPage"), "SetPasswordPage");
 const DashboardPage = lazyPage(() => import("@/pages/DashboardPage"), "DashboardPage");
 const StaffPage = lazyPage(() => import("@/pages/staff/StaffPage"), "StaffPage");
 const StaffDetailPage = lazyPage(() => import("@/pages/staff/StaffDetailPage"), "StaffDetailPage");
@@ -97,6 +98,7 @@ export default function App() {
         <Suspense fallback={<div className="flex min-h-dvh items-center justify-center" role="status">Loading...</div>}>
           <Routes>
             <Route path="/login" element={<LoginPage />}/>
+            <Route path="/set-password" element={<SetPasswordPage />}/>
             <Route path="*" element={<RoleRoutes />}/>
           </Routes>
         </Suspense>

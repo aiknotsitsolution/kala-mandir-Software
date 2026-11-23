@@ -156,8 +156,14 @@ export function MembersPage() {
     const handleSave = async (payload) => {
         try {
             if (payload.mode === "create") {
-                await data.createMember(payload.input);
+                const created = await data.createMember(payload.input);
                 toast.success(`${payload.input.fullName} added`);
+                members.reload();
+                return {
+                    id: created.id,
+                    email: created.email,
+                    emailVerification: created.emailVerification,
+                };
             }
             else if (editing) {
                 await data.updateMember(editing.id, payload.input);
