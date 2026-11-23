@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
+import RefreshSession from "../models/RefreshSession.js";
 
 /**
  * Staff/instructor portal logins.
@@ -67,6 +68,11 @@ export async function ensureStaffLogin(
         { $set: { email: normalizedEmail, fullName, phone: phone ?? null, role, passwordHash } },
         opts,
       );
+      await RefreshSession.updateMany(
+        { userId: existing._id, revokedAt: null },
+        { $set: { revokedAt: new Date() } },
+        opts,
+      );
       return { userId: String(existing._id), created: false, passwordReset: true };
     }
   }
@@ -110,5 +116,12 @@ export async function setStaffLoginActive(profileId, isActive, session = null) {
     { $set: { isActive: Boolean(isActive) } },
     session ? { session } : {},
   );
+  if (!isActive) {
+    await RefreshSession.updateMany(
+      { userId: profileId, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+      session ? { session } : {},
+    );
+  }
   return result.modifiedCount ?? 0;
 }

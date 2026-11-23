@@ -1,25 +1,24 @@
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
+import RefreshSession from "../models/RefreshSession.js";
 
-/**
- * Member portal logins.
- *
- * Every gym member gets a `role: "member"` user so they can sign in with
- * their MongoDB member ID. The login uses a synthetic unique email that is
- * never exposed through the API.
- */
-export const MEMBER_DEFAULT_PASSWORD = process.env.MEMBER_DEFAULT_PASSWORD ?? "test@123";
 
 export function memberLoginEmail(gymId, memberId) {
   return `${String(gymId)}.${String(memberId)}`.toLowerCase() + "@members.kalamandir.local";
 }
 
-/**
- * Create the member's login if it doesn't exist yet (idempotent).
- * Returns the created user, or null when one already existed.
- */
+
 export async function ensureMemberLogin(
-  { gymId, memberId, fullName, phone, password },
+  {
+    gymId,
+    memberId,
+    fullName,
+    phone,
+    password,
+    isActive = true,
+    emailVerified = true,
+    passwordSetupRequired = false,
+  },
   session = null,
 ) {
   const existing = await User.findOne({ memberId, role: "member" })
@@ -28,7 +27,8 @@ export async function ensureMemberLogin(
     .lean();
   if (existing) return null;
 
-  const passwordHash = await bcrypt.hash(password ?? MEMBER_DEFAULT_PASSWORD, 10);
+  if (!password) throw new Error("A generated password is required for a member login.");
+  const passwordHash = await bcrypt.hash(password, 10);
   const [user] = await User.create(
     [
       {
@@ -39,7 +39,9 @@ export async function ensureMemberLogin(
         phone: phone ?? null,
         passwordHash,
         role: "member",
-        isActive: true,
+        isActive,
+        emailVerified,
+        passwordSetupRequired,
       },
     ],
     session ? { session } : {},
@@ -56,10 +58,26 @@ export async function ensureMemberLogin(
  * updated so callers can report/audit accurately.
  */
 export async function syncMemberLoginStatus(memberId, isActive, session = null) {
+  const filter = {
+    memberId,
+    role: "member",
+    ...(isActive ? { emailVerified: { $ne: false } } : {}),
+  };
+  const options = session ? { session } : {};
+  const matchingUsers = isActive
+    ? []
+    : await User.find(filter).select("_id").session(session).lean();
   const result = await User.updateMany(
-    { memberId, role: "member" },
+    filter,
     { $set: { isActive: Boolean(isActive) } },
-    session ? { session } : {},
+    options,
   );
+  if (matchingUsers.length) {
+    await RefreshSession.updateMany(
+      { userId: { $in: matchingUsers.map((user) => user._id) }, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+      options,
+    );
+  }
   return result.modifiedCount ?? 0;
 }

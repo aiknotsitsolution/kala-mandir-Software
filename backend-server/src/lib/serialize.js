@@ -95,6 +95,7 @@ export function toMember(doc) {
     gymId: id(doc.gymId),
     fullName: doc.fullName,
     email: doc.email ?? null,
+    emailVerifiedAt: iso(doc.emailVerifiedAt),
     phone: doc.phone,
     photoUrl: doc.photoUrl ?? null,
     dateOfBirth: ymd(doc.dateOfBirth),

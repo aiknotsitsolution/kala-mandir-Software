@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
+import { Types } from "mongoose";
 import config from "../config.js";
 import User from "../models/User.js";
+import RefreshSession from "../models/RefreshSession.js";
 import { ApiError, unauthorized, forbidden } from "../lib/errors.js";
 import { can } from "../lib/permissions.js";
 
@@ -14,13 +16,33 @@ export async function requireAuth(req, _res, next) {
 
     let payload;
     try {
-      payload = jwt.verify(token, config.jwtSecret);
+      payload = jwt.verify(token, config.jwtSecret, {
+        algorithms: ["HS256"],
+        issuer: "kalamandir-api",
+        audience: "kalamandir-app",
+      });
     } catch {
       throw unauthorized("Invalid or expired token");
     }
 
-    const user = await User.findById(payload.sub).lean();
-    if (!user || !user.isActive) {
+    if (
+      payload.tokenUse !== "access" ||
+      !Types.ObjectId.isValid(payload.sub) ||
+      !Types.ObjectId.isValid(payload.sid)
+    ) {
+      throw unauthorized("Invalid or expired token");
+    }
+
+    const [user, session] = await Promise.all([
+      User.findById(payload.sub).lean(),
+      RefreshSession.findOne({
+        _id: payload.sid,
+        userId: payload.sub,
+        revokedAt: null,
+        expiresAt: { $gt: new Date() },
+      }).select("_id").lean(),
+    ]);
+    if (!user || !user.isActive || !session) {
       throw unauthorized("Account is disabled or no longer exists");
     }
 
@@ -31,6 +53,7 @@ export async function requireAuth(req, _res, next) {
       fullName: user.fullName,
       email: user.email ?? null,
       memberId: user.memberId ? String(user.memberId) : null,
+      sessionId: String(session._id),
     };
     next();
   } catch (err) {
@@ -49,11 +72,23 @@ export function requireCap(capability) {
   };
 }
 
-export function signToken(user) {
+export function signAccessToken(user, sessionId) {
   return jwt.sign(
-    { sub: String(user._id), gymId: String(user.gymId), role: user.role, fullName: user.fullName },
+    {
+      sub: String(user._id),
+      sid: String(sessionId),
+      gymId: String(user.gymId),
+      role: user.role,
+      fullName: user.fullName,
+      tokenUse: "access",
+    },
     config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn },
+    {
+      expiresIn: config.accessTokenExpiresIn,
+      issuer: "kalamandir-api",
+      audience: "kalamandir-app",
+      algorithm: "HS256",
+    },
   );
 }
 

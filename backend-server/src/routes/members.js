@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { Types } from "mongoose";
 import Member from "../models/Member.js";
+import User from "../models/User.js";
 import Tag from "../models/Tag.js";
 import MemberMembership from "../models/MemberMembership.js";
 import MembershipPlan from "../models/MembershipPlan.js";
@@ -26,6 +27,12 @@ import { loadGymContext } from "../services/context.js";
 import { decorateAllMembers, decorateMember } from "../services/members.js";
 import { createPaymentRow } from "../services/payments.js";
 import { quotaForMembership } from "../services/quota.js";
+import {
+  issueEmailOtp,
+  issuePasswordSetupLink,
+  sendStudentAccountReadyEmail,
+  verifyEmailOtp,
+} from "../services/authChallenges.js";
 import { ensureMemberLogin, syncMemberLoginStatus } from "../lib/memberLogins.js";
 import { CLASS_TAGS } from "../lib/constants.js";
 
@@ -58,6 +65,8 @@ const createMemberSchema = z.object({
     .union([z.string().trim().email("Enter a valid email address"), z.literal(""), z.null()])
     .optional()
     .transform((v) => v || null),
+  password: z.string().min(8, "Password must be at least 8 characters").max(72),
+  confirmPassword: z.string().min(8, "Confirm the student password").max(72),
   phone: z.string().trim().regex(/^\+91\d{10}$/, "Enter a valid 10-digit Indian phone number"),
   photoUrl: z.string().nullish(),
   dateOfBirth: z.string().nullish(),
@@ -98,19 +107,17 @@ const createMemberSchema = z.object({
   planId: z.string().min(1, "Plan is required"),
   membershipStart: z.string().min(4, "Membership start is required"),
   initialPayment: initialPaymentSchema.nullish(),
-  /**
-   * Individually chosen portal password for the new student (required).
-   * Replaces the old shared default — each student sets their own.
-   */
-  loginPassword: z
-    .string({ required_error: "Set a portal password for the student" })
-    .min(6, "Portal password must be at least 6 characters")
-    .max(72),
 });
 
 const updateMemberSchema = createMemberSchema
   .partial()
-  .omit({ planId: true, membershipStart: true, initialPayment: true, loginPassword: true })
+  .omit({
+    planId: true,
+    membershipStart: true,
+    initialPayment: true,
+    password: true,
+    confirmPassword: true,
+  })
   .extend({ status: z.enum(["active", "inactive"]).optional() });
 
 const renewSchema = z.object({
@@ -122,6 +129,37 @@ const renewSchema = z.object({
   source: z.enum(["new", "renewal", "extension", "correction"]).optional(),
   initialPayment: initialPaymentSchema.nullish(),
 });
+
+const studentOtpSchema = z.object({
+  challengeId: z.string().min(1),
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+
+async function studentRegistrationDetails(member, gymId) {
+  const membership = await MemberMembership.findOne({
+    memberId: member._id,
+    status: { $ne: "cancelled" },
+  })
+    .sort({ endDate: -1 })
+    .lean();
+  const plan = membership
+    ? await MembershipPlan.findOne({ _id: membership.planId, gymId }).select("name").lean()
+    : null;
+  return {
+    email: member.email,
+    name: member.fullName,
+    memberId: String(member._id),
+    phone: member.phone,
+    planName: plan?.name,
+  };
+}
+
+async function sendStudentPasswordSetup(member, user, gymId) {
+  return issuePasswordSetupLink({
+    userId: user._id,
+    ...(await studentRegistrationDetails(member, gymId)),
+  });
+}
 
 const setMemberStatusSchema = z.object({ status: z.enum(["active", "inactive"]) });
 
@@ -421,6 +459,12 @@ router.post(
   asyncHandler(async (req, res) =>
   {
     const input = parseBody(createMemberSchema, req.body);
+    if (input.password !== input.confirmPassword) {
+      throw badRequest("Student passwords do not match.", "password_mismatch");
+    }
+    if (!input.email) {
+      throw badRequest("A student email is required for OTP verification.", "email_required");
+    }
     const classTags = classTagsFromInput(input);
     if (!classTags.length) throw badRequest("Choose at least one class tag.");
     const ctx = await loadGymContext(req.user.gymId);
@@ -598,7 +642,10 @@ router.post(
             memberId: member._id,
             fullName: input.fullName,
             phone: input.phone,
-            password: input.loginPassword,
+            password: input.password,
+            isActive: false,
+            emailVerified: false,
+            passwordSetupRequired: false,
           },
           session,
         );
@@ -664,7 +711,26 @@ router.post(
       throw err;
     }
 
-    res.status(201).json(await decorateMember(created, ctx));
+    const response = await decorateMember(created, ctx);
+    const user = await User.findOne({ memberId: created._id, role: "member" }).select("_id").lean();
+    if (!user) throw conflict("The student login could not be created.", "member_login_missing");
+
+    let emailVerification;
+    try {
+      emailVerification = {
+        status: "otp_sent",
+        ...(await issueEmailOtp({
+          userId: user._id,
+          email: created.email,
+          purpose: "student_registration",
+          name: created.fullName,
+        })),
+      };
+    } catch (error) {
+      if (error?.code !== "email_delivery_failed") throw error;
+      emailVerification = { status: "delivery_failed" };
+    }
+    res.status(201).json({ ...response, emailVerification });
   }),
 );
 
@@ -1058,6 +1124,111 @@ router.get(
         ),
       };
     }));
+  }),
+);
+
+/** Send or verify the student registration email, then issue a password setup link. */
+router.post(
+  "/members/:id/registration-otp",
+  requireAuth,
+  requireCap("members.create"),
+  asyncHandler(async (req, res) =>
+  {
+    const ctx = await loadGymContext(req.user.gymId);
+    const member = await findMemberOr404(ctx.gym._id, req.params.id);
+    if (!member.email) throw badRequest("Add a student email before verification.", "email_required");
+    const user = await User.findOne({
+      gymId: ctx.gym._id,
+      memberId: member._id,
+      role: "member",
+    }).select("_id emailVerified passwordSetupRequired").lean();
+    if (!user) throw notFound("Student login not found.");
+
+    if (member.emailVerifiedAt || user.emailVerified !== false) {
+      if (user.passwordSetupRequired) {
+        res.json({
+          status: "password_setup_sent",
+          ...(await sendStudentPasswordSetup(member, user, ctx.gym._id)),
+        });
+        return;
+      }
+      res.json({ status: "already_verified" });
+      return;
+    }
+
+    res.json({
+      status: "otp_sent",
+      ...(await issueEmailOtp({
+        userId: user._id,
+        email: member.email,
+        purpose: "student_registration",
+        name: member.fullName,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/members/:id/registration-otp/verify",
+  requireAuth,
+  requireCap("members.create"),
+  asyncHandler(async (req, res) =>
+  {
+    const input = parseBody(studentOtpSchema, req.body);
+    const ctx = await loadGymContext(req.user.gymId);
+    const member = await findMemberOr404(ctx.gym._id, req.params.id);
+    const user = await User.findOne({
+      gymId: ctx.gym._id,
+      memberId: member._id,
+      role: "member",
+    }).select("_id emailVerified passwordSetupRequired").lean();
+    if (!user) throw notFound("Student login not found.");
+
+    const challenge = await verifyEmailOtp({
+      ...input,
+      purpose: "student_registration",
+      userId: user._id,
+    });
+    if (challenge.email !== member.email?.trim().toLowerCase()) {
+      throw badRequest("The student email changed. Request a new verification code.", "email_changed");
+    }
+
+    const verifiedAt = new Date();
+    await Promise.all([
+      Member.updateOne(
+        { _id: member._id, gymId: ctx.gym._id },
+        { $set: { emailVerifiedAt: verifiedAt } },
+      ),
+      User.updateOne(
+        { _id: user._id, gymId: ctx.gym._id },
+        {
+          $set: {
+            emailVerified: true,
+            isActive: user.passwordSetupRequired ? false : member.status === "active",
+          },
+        },
+      ),
+    ]);
+
+    if (user.passwordSetupRequired) {
+      res.json({
+        status: "password_setup_sent",
+        ...(await sendStudentPasswordSetup(member, user, ctx.gym._id)),
+      });
+      return;
+    }
+
+    let notificationDelivery = "sent";
+    try {
+      await sendStudentAccountReadyEmail(await studentRegistrationDetails(member, ctx.gym._id));
+    } catch (error) {
+      if (error?.code !== "email_delivery_failed") throw error;
+      notificationDelivery = "failed";
+    }
+    res.json({
+      status: "verified",
+      notificationDelivery,
+    });
   }),
 );
 

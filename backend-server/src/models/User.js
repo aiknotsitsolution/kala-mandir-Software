@@ -15,6 +15,9 @@ const UserSchema = new Schema(
       enum: ["owner", "admin", "front_desk", "trainer", "member"],
       default: "front_desk",
     },
+    /** Existing accounts stay enabled; newly registered students verify first. */
+    emailVerified: { type: Boolean, default: true },
+    passwordSetupRequired: { type: Boolean, default: false },
     /** Set for role "member": the gym member this login belongs to. */
     memberId: { type: Schema.Types.ObjectId, ref: "Member", default: null, index: true },
     avatarUrl: { type: String, default: null },

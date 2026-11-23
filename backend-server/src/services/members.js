@@ -4,6 +4,7 @@ import Member from "../models/Member.js";
 import MemberMembership from "../models/MemberMembership.js";
 import MembershipPlan from "../models/MembershipPlan.js";
 import Tag from "../models/Tag.js";
+import User from "../models/User.js";
 import { toMemberWithMembership } from "../lib/serialize.js";
 import { quotaForMembership } from "./quota.js";
 
@@ -75,5 +76,17 @@ export async function decorateMember(memberDoc, ctx, session = null) {
   const tagById = await loadTagMap(memberDoc.gymId);
   const member = toMemberWithMembership(memberDoc, current, plan, ctx);
   member.quota = current ? await quotaForMembership(current, session) : null;
+  const portalLogin = await User.findOne({ memberId: memberDoc._id, role: "member" })
+    .select("emailVerified isActive passwordSetupRequired")
+    .session(session)
+    .lean();
+  member.emailVerificationPending = Boolean(
+    portalLogin &&
+    (
+      portalLogin.emailVerified === false ||
+      portalLogin.passwordSetupRequired === true ||
+      (portalLogin.isActive === false && memberDoc.status === "active")
+    ),
+  );
   return joinTags(member, tagById);
 }

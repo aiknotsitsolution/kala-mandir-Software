@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { Types } from "mongoose";
 import User from "../models/User.js";
+import RefreshSession from "../models/RefreshSession.js";
 import Member from "../models/Member.js";
 import MemberMembership from "../models/MemberMembership.js";
 import Tag from "../models/Tag.js";
@@ -456,6 +457,14 @@ router.post(
 
     user.passwordHash = await bcrypt.hash(newPassword, 10);
     await user.save();
+    await RefreshSession.updateMany(
+      {
+        userId: user._id,
+        _id: { $ne: req.user.sessionId },
+        revokedAt: null,
+      },
+      { $set: { revokedAt: new Date() } },
+    );
     await writeAudit({
       gymId: req.user.gymId,
       actorId: req.user.id,

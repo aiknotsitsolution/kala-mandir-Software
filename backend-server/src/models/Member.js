@@ -8,6 +8,7 @@ const MemberSchema = new Schema(
     gymId: { type: Schema.Types.ObjectId, ref: "Gym", required: true },
     fullName: { type: String, required: true, trim: true },
     email: { type: String, default: null, lowercase: true, trim: true },
+    emailVerifiedAt: { type: Date, default: null },
     phone: { type: String, required: true, trim: true },
     photoUrl: { type: String, default: null },
     dateOfBirth: { type: Date, default: null },
