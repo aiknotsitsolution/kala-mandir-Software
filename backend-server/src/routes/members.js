@@ -19,7 +19,7 @@ import { parseBody, intParam } from "../middleware/validate.js";
 import { toMember, toMembership, toAttendance, toPayment, ymd } from "../lib/serialize.js";
 import { generateQrToken } from "../lib/qr.js";
 import { writeAudit, pick } from "../lib/audit.js";
-import { planEndDate, renewalStartDate, currentMembership } from "../lib/membership.js";
+import { planEndDate, renewalStartDate, currentMembership, effectiveStatus } from "../lib/membership.js";
 import { quotaForPlan, computeQuota } from "../lib/quota.js";
 import { parseDateOnly, ymdInTz } from "../lib/dates.js";
 import { loadGymContext } from "../services/context.js";
@@ -1044,7 +1044,19 @@ router.get(
       .lean();
     const plans = await MembershipPlan.find({ gymId: ctx.gym._id }).lean();
     const planById = new Map(plans.map((p) => [String(p._id), p]));
-    res.json(rows.map((row) => toMembership(row, planById.get(String(row.planId)))));
+    res.json(rows.map((row) => {
+      const membership = toMembership(row, planById.get(String(row.planId)));
+      return {
+        ...membership,
+        effectiveStatus: effectiveStatus(
+          membership ? { startDate: membership.startDate, endDate: membership.endDate, status: membership.status } : null,
+          "active",
+          ctx.now,
+          ctx.expiringSoonDays,
+          ctx.tz,
+        ),
+      };
+    }));
   }),
 );
 

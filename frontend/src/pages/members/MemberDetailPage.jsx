@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "
 import { useAuth, useData } from "@/auth/AuthProvider";
 import { useAsync } from "@/hooks";
 import { durationLabel, formatDateTime, formatDate, formatINR, PAYMENT_METHOD_LABELS, timeSlotLabel, titleCase, } from "@/lib/format";
+import { effectiveStatus as deriveEffectiveStatus } from "@/lib/membership";
 import { can } from "@/lib/permissions";
 import { MemberFormDialog } from "./MemberFormDialog";
 import { RenewDialog } from "./RenewDialog";
@@ -190,7 +191,7 @@ export function MemberDetailPage() {
                     {membership ? "Live plan and validity" : "No plan assigned yet"}
                   </p>
                 </div>
-                {membership ? <StatusBadge status={membership.status}/> : null}
+                {membership ? <StatusBadge status={current.effectiveStatus}/> : null}
               </CardHeader>
               <CardContent>
                 {membership ? (<div className="grid gap-4 sm:grid-cols-2">
@@ -218,11 +219,17 @@ export function MemberDetailPage() {
                       <p className="text-xs tracking-wide text-muted-foreground uppercase">End</p>
                       <p className="mt-1 text-sm font-medium">{formatDate(membership.endDate)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {current.daysRemaining === null
-                ? "—"
-                : current.daysRemaining <= 0
-                    ? "Expired"
-                    : `${current.daysRemaining} days remaining`}
+                        {current.effectiveStatus === "expired"
+                ? "Expired"
+                : current.effectiveStatus === "inactive"
+                    ? "Inactive"
+                    : current.effectiveStatus === "none"
+                        ? "Not started"
+                        : current.daysRemaining === null
+                            ? "—"
+                            : current.daysRemaining <= 0
+                                ? "Expires today"
+                                : `${current.daysRemaining} days remaining`}
                       </p>
                     </div>
                   </div>) : (<EmptyState icon={<CalendarDaysIcon className="size-5"/>} title="No membership assigned" description="Assign a plan to generate a valid QR card for this student." className="py-8" action={canEdit ? (<Button size="sm" onClick={() => setRenewOpen(true)}>
@@ -281,7 +288,7 @@ export function MemberDetailPage() {
                         <Badge variant="outline" className="capitalize">{titleCase(entry.source)}</Badge>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={entry.status}/>
+                        <StatusBadge status={entry.effectiveStatus ?? deriveEffectiveStatus(entry, "active")}/>
                       </TableCell>
                     </TableRow>))}
                 </TableBody>
