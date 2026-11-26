@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlansPage } from "@/pages/plans/PlansPage";
 import { queryApi } from "@/data/api/queryApi";
 import { store } from "@/store";
+import { plansFiltersReset } from "@/store/plansSlice";
 
 /* The page reads auth + the data layer from the provider. Mock the provider
    with an in-memory plan fixture so the real filtering/view/dialog logic runs
@@ -39,6 +40,7 @@ const gridRadio = () => screen.getByRole("radio", { name: /grid view/i });
 
 beforeEach(() => {
     store.dispatch(queryApi.util.resetApiState());
+    store.dispatch(plansFiltersReset());
     Object.assign(mockData, {
         listPlans: vi.fn(async () => FIXTURE_PLANS),
         getPlanDistribution: vi.fn(async () => [{ planId: "p1", count: 3 }]),

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { motion, useReducedMotion } from "motion/react";
@@ -13,9 +14,7 @@ import { PlanCard } from "./PlanCard";
 import { PlanDialog } from "./PlanDialog";
 import { PlansToolbar } from "./PlansToolbar";
 import { TogglePlanDialog } from "./TogglePlanDialog";
-
-/** List view is the default, matching the studio's reference layout. */
-const DEFAULT_VIEW = "list";
+import { plansQueryChanged, plansStatusChanged, plansViewChanged } from "@/store/plansSlice";
 
 /** Small gold lotus ornament shown beside the page title (reference layout). */
 function LotusOrnament({ className }) {
@@ -27,6 +26,7 @@ function LotusOrnament({ className }) {
 }
 
 export function PlansPage() {
+    const dispatch = useDispatch();
     const data = useData();
     const { session } = useAuth();
     const role = session?.profile.role;
@@ -40,16 +40,19 @@ export function PlansPage() {
 
     /* View + filter state lives here (not in the toolbar) so switching views
        never reloads the page or clears the search term / status filter. */
-    const [view, setView] = useState(DEFAULT_VIEW);
-    const [query, setQuery] = useState("");
-    const [status, setStatus] = useState("all");
+    const view = useSelector((state) => state.plans.view);
+    const query = useSelector((state) => state.plans.query);
+    const status = useSelector((state) => state.plans.status);
+    const setView = useCallback((value) => dispatch(plansViewChanged(value)), [dispatch]);
+    const setQuery = useCallback((value) => dispatch(plansQueryChanged(value)), [dispatch]);
+    const setStatus = useCallback((value) => dispatch(plansStatusChanged(value)), [dispatch]);
 
     const plans = useAsync(() => data.listPlans(true), [data]);
     const distribution = useAsync(() => data.getPlanDistribution(), [data]);
     const reloadAll = useCallback(() => {
         plans.reload();
         distribution.reload();
-    }, [plans, distribution]);
+    }, [plans.reload, distribution.reload]);
 
     // Auto-open the "new plan" dialog when arriving from /plans?new=1 (dashboard link).
     // Keep the param while the dialog should be open (remount-safe); clear on dismiss.

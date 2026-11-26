@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -12,12 +13,60 @@ import { useData } from "@/auth/AuthProvider";
 import { useSubmitGuard } from "@/hooks";
 import { durationLabel } from "@/lib/format";
 import { numericValue, planFormSchema } from "@/lib/validation";
+import { cn } from "@/lib/utils";
 const DURATION_UNITS = [
     { value: "day", label: "Days" },
     { value: "week", label: "Weeks" },
     { value: "month", label: "Months" },
     { value: "year", label: "Years" },
 ];
+const WEEK_DAYS = [
+    { value: 1, label: "Monday", short: "Mon" },
+    { value: 2, label: "Tuesday", short: "Tue" },
+    { value: 3, label: "Wednesday", short: "Wed" },
+    { value: 4, label: "Thursday", short: "Thu" },
+    { value: 5, label: "Friday", short: "Fri" },
+    { value: 6, label: "Saturday", short: "Sat" },
+    { value: 7, label: "Sunday", short: "Sun" },
+];
+
+function parseSelectedDays(scheduleLabel) {
+    const value = String(scheduleLabel ?? "").trim();
+    if (!value)
+        return [];
+
+    const lower = value.toLowerCase();
+    const rangeMatch = lower.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*(?:-|–|—|to)\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/);
+    if (rangeMatch) {
+        const first = WEEK_DAYS.find((day) => day.label.toLowerCase() === rangeMatch[1]);
+        const last = WEEK_DAYS.find((day) => day.label.toLowerCase() === rangeMatch[2]);
+        if (first && last && last.value >= first.value)
+            return WEEK_DAYS.filter((day) => day.value >= first.value && day.value <= last.value).map((day) => day.value);
+    }
+
+    return WEEK_DAYS
+        .filter((day) => lower.includes(day.label.toLowerCase()))
+        .map((day) => day.value);
+}
+
+function formatSelectedDays(selected) {
+    if (selected.length === 0)
+        return "";
+    if (selected.length === 7)
+        return "Monday – Sunday";
+    const sorted = [...selected].sort((a, b) => a - b);
+    const consecutive = sorted.every((day, index) => index === 0 || day === sorted[index - 1] + 1);
+    if (consecutive && sorted.length > 2) {
+        const first = WEEK_DAYS.find((day) => day.value === sorted[0]);
+        const last = WEEK_DAYS.find((day) => day.value === sorted.at(-1));
+        return `${first.label} – ${last.label}`;
+    }
+    return sorted
+        .map((value) => WEEK_DAYS.find((day) => day.value === value)?.label)
+        .filter(Boolean)
+        .join(", ");
+}
+
 function FieldError({ message }) {
     if (!message)
         return null;
@@ -26,6 +75,7 @@ function FieldError({ message }) {
 export function PlanDialog({ plan, open, onOpenChange, onSaved, }) {
     const data = useData();
     const [submitting, run] = useSubmitGuard();
+    const [selectedDays, setSelectedDays] = useState(() => parseSelectedDays(plan?.scheduleLabel));
     const defaultValues = {
         name: plan?.name ?? "",
         description: plan?.description ?? "",
@@ -37,7 +87,7 @@ export function PlanDialog({ plan, open, onOpenChange, onSaved, }) {
         benefits: (plan?.benefits ?? []).join("\n"),
         isActive: plan?.isActive ?? true,
     };
-    const { register, handleSubmit, control, watch, formState: { errors, isSubmitting }, } = useForm({
+    const { register, handleSubmit, control, watch, setValue, formState: { errors, isSubmitting }, } = useForm({
         resolver: zodResolver(planFormSchema),
         defaultValues,
     });
@@ -45,6 +95,15 @@ export function PlanDialog({ plan, open, onOpenChange, onSaved, }) {
     const durationUnit = watch("durationUnit");
     const isActive = watch("isActive");
     const classQuotaValue = watch("classQuota");
+    const toggleDay = (dayValue) => {
+        setSelectedDays((current) => {
+            const next = current.includes(dayValue)
+                ? current.filter((value) => value !== dayValue)
+                : [...current, dayValue];
+            setValue("scheduleLabel", formatSelectedDays(next), { shouldDirty: true });
+            return next;
+        });
+    };
     const onSubmit = handleSubmit((values) => {
         const payload = {
             name: values.name,
@@ -155,9 +214,36 @@ export function PlanDialog({ plan, open, onOpenChange, onSaved, }) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="plan-schedule">Weekly schedule</Label>
-            <Input id="plan-schedule" placeholder="e.g. Monday – Friday" aria-invalid={errors.scheduleLabel ? true : undefined} {...register("scheduleLabel")}/>
-            <p className="text-xs text-muted-foreground">Shown next to the calendar icon on the card — leave blank to derive it from the duration.</p>
+            <Label>Weekly schedule</Label>
+            <Input id="plan-schedule" className="sr-only" tabIndex={-1} aria-label="Weekly schedule" aria-invalid={errors.scheduleLabel ? true : undefined} {...register("scheduleLabel")}/>
+            <div className="grid grid-cols-7 gap-1.5" role="group" aria-label="Select weekly schedule days">
+              {WEEK_DAYS.map((day) => {
+                const checked = selectedDays.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={checked}
+                    aria-label={day.label}
+                    onClick={() => toggleDay(day.value)}
+                    className={cn(
+                        "flex h-9 items-center justify-center rounded-md border text-[11px] font-medium transition-colors",
+                        checked
+                            ? "border-km-gold/60 bg-km-gold/15 text-foreground"
+                            : "border-input text-muted-foreground hover:bg-secondary",
+                    )}
+                  >
+                    {day.short}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {selectedDays.length
+                ? `Selected: ${formatSelectedDays(selectedDays)}`
+                : "Select the days included in this plan — leave blank to derive it from the duration."}
+            </p>
             <FieldError message={errors.scheduleLabel?.message}/>
           </div>
 

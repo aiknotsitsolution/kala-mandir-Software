@@ -11,8 +11,11 @@ export const queryApi = createApi({
     baseQuery: fakeBaseQuery(),
     tagTypes: ["Data"],
     refetchOnMountOrArgChange: 30,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
+    // Mutation invalidation and explicit reloads are the only refetch sources.
+    // Automatic focus/reconnect refetches caused the page to keep refreshing
+    // while the user's window or network state changed.
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
     endpoints: (builder) => ({
         executeQuery: builder.query({
             async queryFn(key) {
